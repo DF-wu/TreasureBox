@@ -1,0 +1,30 @@
+import java.security.DrbgParameters.Reseed;
+import java.util.ArrayList;
+import javax.naming.spi.DirStateFactory.Result;
+import jdk.javadoc.internal.doclets.formats.html.SourceToHTMLConverter;
+
+class HarmonicMean{
+    public static void main(String[] args) {        
+        // 建立清單
+        ArrayList<Double> inputs = new ArrayList<>();
+        
+        // 放1到10 在清單裡 當作輸入
+        for (double i = 0; i < 10; i++) {
+            inputs.add(i+1);
+        }
+        
+        //變數 小分母
+        double sum = 0;
+        
+        //把每個輸入數字變倒數 並且加進小分母和內
+        for (int i = 0; i < 10; i++) {
+            sum = sum + (1 / inputs.get(i));
+        }
+        
+        //最後相加結果再倒數
+        double bigDenominator = (1 / sum);
+        
+        //印出來
+        System.out.println(bigDenominator);
+    }
+}
