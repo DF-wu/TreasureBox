@@ -262,22 +262,22 @@ install_smart() {
 ip_info4(){
 	ip_date=$(curl -4 -s http://api.ip.la/en?json)
 	echo $ip_date > ip_json.json
-	isp=$(python tools.py geoip isp)
-	as_tmp=$(python tools.py geoip as)
+	isp=$(python2 tools.py geoip isp)
+	as_tmp=$(python2 tools.py geoip as)
 	asn=$(echo $as_tmp | awk -F ' ' '{print $1}')
-	org=$(python tools.py geoip org)
+	org=$(python2 tools.py geoip org)
 	if [ -z "ip_date" ]; then
 		echo $ip_date
 		echo "hala"
-		country=$(python tools.py ipip country_name)
-		city=$(python tools.py ipip city)
-		countryCode=$(python tools.py ipip country_code)
-		region=$(python tools.py ipip province)
+		country=$(python2 tools.py ipip country_name)
+		city=$(python2 tools.py ipip city)
+		countryCode=$(python2 tools.py ipip country_code)
+		region=$(python2 tools.py ipip province)
 	else
-		country=$(python tools.py geoip country)
-		city=$(python tools.py geoip city)
-		countryCode=$(python tools.py geoip countryCode)
-		region=$(python tools.py geoip regionName)	
+		country=$(python2 tools.py geoip country)
+		city=$(python2 tools.py geoip city)
+		countryCode=$(python2 tools.py geoip countryCode)
+		region=$(python2 tools.py geoip regionName)	
 	fi
 	if [ -z "$city" ]; then
 		city=${region}

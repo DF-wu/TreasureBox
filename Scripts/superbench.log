@@ -1,0 +1,44 @@
+----------------------------------------------------------------------
+ Superbench.sh -- https://www.oldking.net/350.html
+ Mode  : [0;32mStandard[0m    Version : [0;32m1.1.7[0m
+ Usage : wget -qO- sb.oldking.net | bash
+----------------------------------------------------------------------
+ CPU Model            : [0;36mIntel(R) Xeon(R) CPU E5-2620 v4 @ 2.10GHz[0m
+ CPU Cores            : [0;33m4 Cores [0;36m2099.998 MHz x86_64[0m
+ CPU Cache            : [0;36m20480 KB [0m
+ OS                   : [0;36mManjaro Linux  (64 Bit) [0;33mDedicated[0m
+ Kernel               : [0;36m5.9.11-3-MANJARO[0m
+ Total Space          : [0;36m160.0 GB / [0;33m210.3 GB [0m
+ Total RAM            : [0;36m588 MB / [0;33m3934 MB [0;36m(3157 MB Buff)[0m
+ Total SWAP           : [0;36m0 MB / 0 MB[0m
+ Uptime               : [0;36m6 days 5 hour 59 min[0m
+ Load Average         : [0;36m0.64, 0.32, 0.22[0m
+ TCP CC               : [0;33mcubic[0m
+ ASN & ISP            : [0;36mAS1659, T-NTOU.EDU.TW[0m
+ Organization         : [0;33m[0m
+ Location             : [0;36mKeelung, [0;33mTaiwan / TW[0m
+ Region               : [0;36mTaiwan[0m
+----------------------------------------------------------------------
+ I/O Speed( 1.0GB )   : [0;33m84.3 MB/s[0m
+ I/O Speed( 1.0GB )   : [0;33m90.1 MB/s[0m
+ I/O Speed( 1.0GB )   : [0;33m98.5 MB/s[0m
+ Average I/O Speed    : [0;33m91.0 MB/s[0m
+----------------------------------------------------------------------
+ Node Name        Upload Speed      Download Speed      Latency     
+[0;33m Speedtest.net    [0;32m740.39 Mbit/s     [0;31m443.49 Mbit/s       [0;36m4.45 ms     [0m
+[0;33m Nanjing 5G   CT  [0;32m87.88 Mbit/s      [0;31m201.79 Mbit/s       [0;36m307.59 ms   [0m
+[0;33m Hefei 5G     CT  [0;32m0.67 Mbit/s       [0;31m495.78 Mbit/s       [0;36m316.63 ms   [0m
+[0;33m Guangzhou 5G CT  [0;32m1.05 Mbit/s       [0;31m122.71 Mbit/s       [0;36m342.07 ms   [0m
+[0;33m TianJin 5G   CU  [0;32m0.46 Mbit/s       [0;31m12.59 Mbit/s        [0;36m496.52 ms   [0m
+[0;33m Shanghai 5G  CU  [0;32m0.50 Mbit/s       [0;31m381.78 Mbit/s       [0;36m522.50 ms   [0m
+[0;33m Tianjin 5G   CM  [0;32m0.80 Mbit/s       [0;31m533.71 Mbit/s       [0;36m394.64 ms   [0m
+[0;33m Wuxi 5G      CM  [0;32m0.23 Mbit/s       [0;31m429.58 Mbit/s       [0;36m280.74 ms   [0m
+[0;33m Hefei 5G     CM  [0;32m158.82 Mbit/s     [0;31m853.03 Mbit/s       [0;36m123.33 ms   [0m
+----------------------------------------------------------------------
+ Finished in  : 6 min 24 sec
+ Timestamp    : 2020-12-30 16:36:54 GMT+8
+----------------------------------------------------------------------
+ Share result:
+ · https://www.speedtest.net/result/c/691cd24f-1e04-4e60-9512-c61614ab9207
+ · https://paste.ubuntu.com/p/mp2xn4d4VJ/
+----------------------------------------------------------------------
