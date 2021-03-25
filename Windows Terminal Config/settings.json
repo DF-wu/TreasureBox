@@ -41,9 +41,9 @@
                 "colorScheme" : "ChallengerDeep",
                 "icon" : "C:/Vtuber.gif",
                 "backgroundImage": "C:/out-transparent-3.gif",
-                "backgroundImageOpacity": 0.5,
+                "backgroundImageOpacity": 0.7,
                 "useAcrylic": true,
-                "acrylicOpacity": 0.1,
+                "acrylicOpacity": 0.75,
                 "backgroundImageStretchMode" : "uniform",
                 "backgroundImageAlignment": "bottomRight",
                 "cursorShape": "vintage"
