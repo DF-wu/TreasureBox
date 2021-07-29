@@ -1,9 +1,9 @@
-#!/usr/bin/ expect
+#!/usr/bin/expect
 
 # Login into PTT via SSH.
 # Combine crontab with this script so you don't forget to login PTT everyday.
 
-# Usage: /bin/bash -c ${FILE_PATH_OF_THIS_SCRIPT}
+# Usage: /bin/bash -c ${FILE_PATH_OF_THIS_SCRIPT} 
 
 # Example in crontab:
 # ptt auto login, every day at 12:00 PM                                            
@@ -11,8 +11,12 @@
 
 spawn ssh -oBatchMode=no -oStrictHostKeyChecking=no bbsu@ptt.cc
 
-set BBS_ID "REPLACE_WITH_YOUR_ID"
-set BBS_PW "REPLACE_WITH_YOUR_PASSOWRD"
+# Usage: /bin/bash -c '${FILE_PATH_OF_THIS_SCRIPT} ${BBS_ID} ${BBS_PW}'
+set BBS_ID [lindex $argv 0]
+set BBS_PW [lindex $argv 1]
+
+#set BBS_ID "REPLACE_WITH_YOUR_ID"
+#set BBS_PW "REPLACE_WITH_YOUR_PASSOWRD"
 
 expect {
       "請輸入代號" { send "$BBS_ID\r" ; exp_continue }
