@@ -3,6 +3,9 @@
 # Login into PTT via SSH.
 # Combine crontab with this script so you don't forget to login PTT everyday.
 
+# remember to chmod to ur own permission
+
+
 # Usage: /bin/bash -c ${FILE_PATH_OF_THIS_SCRIPT} 
 
 # Example in crontab:
