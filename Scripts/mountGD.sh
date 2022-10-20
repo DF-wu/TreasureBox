@@ -16,7 +16,7 @@
 	echo "Starting......"
     echo "Start Successfully!"
 
-sudo rclone mount -vv ntouGD: /GDmount --allow-other --allow-non-empty --vfs-cache-mode writes
+sudo rclone mount -vv ntouGD: /GDmount --fast-list --allow-other --allow-non-empty --vfs-cache-mode writes
 
 
 echo " ========================================================= "
