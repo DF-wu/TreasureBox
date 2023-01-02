@@ -16,11 +16,20 @@ for msg in contents:
     if "ban list" in msg:
        ips.append(msg[msg.find('[',10) +1 : msg.find(']', 10)])
 
-ipset = set(ips)       
+     
+
+yuderfile = open("yuder's-banned-list.txt", "r")
+for ip in yuderfile:
+    ips.append(ip)
+      
+ipset = set(ips)  
 
 f = open("ban-ip-list.txt", 'w')
 for ip in ipset:
     f.write(ip + "\n")
+
+
+
 
 print(ipset)
         
