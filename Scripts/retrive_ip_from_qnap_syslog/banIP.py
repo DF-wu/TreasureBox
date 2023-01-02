@@ -14,22 +14,21 @@ with open("system-log.csv", "r", newline="", encoding='utf-8') as csvfile:
 ips= []        
 for msg in contents:
     if "ban list" in msg:
-       ips.append(msg[msg.find('[',10) +1 : msg.find(']', 10)])
+        ipstring = msg[msg.find('[',10) +1 : msg.find(']', 10)]
+        ips.append(ipstring.strip())
 
      
 
 yuderfile = open("yuder's-banned-list.txt", "r")
 for ip in yuderfile:
-    ips.append(ip)
+
+    ips.append(ip.strip())
       
 ipset = set(ips)  
 
 f = open("ban-ip-list.txt", 'w')
-for ip in ipset:
-    f.write(ip + "\n")
-
-
-
+for eachip in ipset:
+    f.write(eachip + "\n")
 
 print(ipset)
         
