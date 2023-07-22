@@ -12,8 +12,8 @@ echo "Your input is ${fanSpeed}. The hexadecimal value is ${hexFanSpeed}."
 #set fan control to manual
 ipmitool -I lanplus  -H 192.168.10.9  -U root -P zxcv6319 raw 0x30 0x30 0x01 0x00
 # replace raw config 
-command = "0x30 0x30 0x02 0xff 0x"${hexFanSpeed}
+rawConfigCommand ="0x30 0x30 0x02 0xff 0x"${hexFanSpeed}
 #set fan speed to target duty cycle
 # ipmitool -I lanplus  -H 192.168.10.9  -U root -P zxcv6319 raw 0x30 0x30 0x02 0xff 0x25
-ipmitool -I lanplus  -H 192.168.10.9  -U root -P zxcv6319 raw ${command}
+ipmitool -I lanplus  -H 192.168.10.9  -U root -P zxcv6319 raw ${rawConfigCommand}
 echo "done"
