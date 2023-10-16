@@ -1,0 +1,1 @@
+sudo apt install duf batcat htop btop byobu lolcat neofetch jq curl ethtool zsh docker docker-compose lsd tree rsync rclone timeshift strace neovime -y
