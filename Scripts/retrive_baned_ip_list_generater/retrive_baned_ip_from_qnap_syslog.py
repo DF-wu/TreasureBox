@@ -5,11 +5,11 @@
 
 import csv
  
-# final ip set
+#  ip list
 ips= []        
 
 
-# --------------------
+# ---------retrieve from Qnap log. START----------
 contents = []
 with open("system-log.csv", "r", newline="", encoding='utf-8') as csvfile:
     reader = csv.reader(csvfile)
@@ -21,16 +21,25 @@ for msg in contents:
     if "ban list" in msg:
         ipstring = msg[msg.find('[',10) +1 : msg.find(']', 10)]
         ips.append(ipstring.strip())
-
+# ---------retrieve from Qnap log. END----------
      
-
+# ---------retrieve from yuder ban ip list. START----------
 yuderfile = open("yuder's-banned-list.txt", "r")
 for ip in yuderfile:
-
     ips.append(ip.strip())
-      
-ipset = set(ips)  
+# ---------retrieve from yuder ban ip list. END----------
 
+
+# ---------retrieve from yisiang nas ban ip list. START----------
+yisiangFile = open("yisiang-nas_deny_ip_list.txt", "r")
+for ip in yisiangFile:
+    ips.append(ip.strip())
+# ---------retrieve from yisiang nas ban ip list. END----------
+
+
+# ---------Aggregate all entries-------------
+# final ip set
+ipset = set(ips)  
 f = open("ban-ip-list.txt", 'w')
 for eachip in ipset:
     f.write(eachip + "\n")
