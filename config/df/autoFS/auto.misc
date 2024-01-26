@@ -1,0 +1,19 @@
+
+#appdata   -fstype=nfs,rw    truenas:/mnt/cachePool/appdata
+#mydata    -fstype=nfs,rw    truenas:/mnt/dfpool/nas/user/mydata
+
+# 掛載點名稱   掛載參數   欲掛載裝置
+appdata     -fstype=nfs,nfsvers=4,rw    truenas:/mnt/cachePool/appdata
+# appdata     -fstype=cifs,rw,noperm,vers=3.0  ://df:0@truenas/appdata
+mydata      -fstype=nfs,nfsvers=4,rw    truenas:/mnt/dfpool/nas/user/mydata
+
+#mydata      -fstype=nfs,rw    truenas:/mnt/dfpool/nas
+# nextcloud aio mount point should never unmount . options is require for solve nextcloud error
+#   fuck you nextcloud.  fallback to fstab.  https://github.com/nextcloud/all-in-one#can-i-use-a-cifssmb-share-as-nextclouds-datadir
+ncdata       -fstype=cifs,rw,mfsymlinks,seal,echo_interval=300,username=df,password=0,file_mode=0777,dir_mode=0777,uid=33,gid=0 ://truenas/ncdata
+#PublicDir    -fstype=cifs,rw,mfsymlinks,seal,echo_interval=300,,username=df,password=0,file_mode=0777,dir_mode=0777,uid=33,gid=0 ://truenas/nas/user/Public
+
+
+#ncdata      -fstype=nfs,nfsvers=4,rw    truenas:/mnt/dfpool/nas/user/mydata/ncdata
+#disks       -fstype=ntfs,rw   :/dev/sdb1
+
