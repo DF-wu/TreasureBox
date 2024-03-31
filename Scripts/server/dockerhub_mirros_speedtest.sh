@@ -25,7 +25,8 @@ mirrors=(
   [netease]="http://hub-mirror.c.163.com"
   [ustc]="https://docker.mirrors.ustc.edu.cn"
   [nju]="https://docker.nju.edu.cn"
-  [qiniu]="https://reg-mirror.qiniu.com"
+  # Timeout
+  # [qiniu]="https://reg-mirror.qiniu.com"
   [baidu]="https://mirror.baidubce.com"
   [sjtug]="https://docker.mirrors.sjtug.sjtu.edu.cn"
   )
