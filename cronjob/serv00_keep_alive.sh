@@ -2,7 +2,7 @@
 # 运行此脚本青龙面板要安装Linux下的sshpass和jq依赖
 # source: https://linux.do/t/topic/173430
 # edit by df 2024.09.10
-# dependency: sshpass
+# dependency: sshpass, jq
 
 echo "开始执行任务..."
 
@@ -52,7 +52,8 @@ for cred in "${CREDENTIALS[@]}"; do
     fi
     
     # 在远程服务器上执行指定的命令
-    OUTPUTS["$user"]=$(sshpass -p "$pass" ssh -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=$SSH_TIMEOUT -t $user@$host "bash /home/你的用户名/start.sh" 2>&1)
+    # OUTPUTS["$user"]=$(sshpass -p "$pass" ssh -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=$SSH_TIMEOUT -t $user@$host "bash /home/dfder/start.sh" 2>&1)
+    OUTPUTS["$user"]=$(sshpass -p "$pass" ssh -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=$SSH_TIMEOUT -t $user@$host "echo 'hello world!'" 2>&1)
     if [ $? -ne 0 ];then
         echo "执行命令失败: $user: ${OUTPUTS["$user"]}"
         has_error=true
