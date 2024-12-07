@@ -4,6 +4,19 @@
 # to back up my mariadb
 
 
+# find the current script uri
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+# set a log file uri
+LOG_FILE="$SCRIPT_DIR/mariadb-backup.sh.log"
+
+# check if log exist. if not, create one.
+if [ ! -f "$LOG_FILE" ]; then
+    touch "$LOG_FILE"
+fi
+
+
+
 # 定義一個函數來打timestamp 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
