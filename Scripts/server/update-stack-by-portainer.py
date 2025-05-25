@@ -88,19 +88,22 @@ def validate_url(url: str) -> str:
     
     return url
 
-def get_configuration() -> tuple[str, str]:
-    """Get Portainer URL and PAT from command line args or interactive input."""
+def get_configuration() -> tuple[str, str, str]:
+    """Get Portainer URL, username and password from command line args or interactive input."""
     parser = argparse.ArgumentParser(
         description="透過 Portainer API 自動重新拉取映像並重新部署 Stacks。",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=f"""
 使用範例:
   {C_CYAN}參數模式:{C_RESET}
-    python {sys.argv[0]} -u http://localhost:9000 -p your_pat_token
-    python {sys.argv[0]} --url https://portainer.example.com --pat your_token
+    python {sys.argv[0]} -u http://localhost:9000 -U admin -P password
+    python {sys.argv[0]} --url https://portainer.example.com --username admin --password mypass
   
   {C_CYAN}互動模式:{C_RESET}
     python {sys.argv[0]}  # 將會提示輸入所有必要資訊
+  
+  {C_CYAN}混合模式:{C_RESET}
+    python {sys.argv[0]} -u http://localhost:9000 -U admin  # 密碼透過安全輸入
 """
     )
     
@@ -110,9 +113,14 @@ def get_configuration() -> tuple[str, str]:
         metavar="URL"
     )
     parser.add_argument(
-        "-p", "--pat",
-        help="Portainer 個人存取權杖 (PAT)。",
-        metavar="TOKEN"
+        "-U", "--username",
+        help="Portainer 使用者名稱。",
+        metavar="USERNAME"
+    )
+    parser.add_argument(
+        "-P", "--password",
+        help="Portainer 密碼（建議透過互動模式安全輸入）。",
+        metavar="PASSWORD"
     )
     parser.add_argument(
         "-v", "--verbose",
@@ -137,28 +145,84 @@ def get_configuration() -> tuple[str, str]:
         print_message("ERROR", "無效的 Portainer URL。")
         sys.exit(1)
     
-    # Get PAT
-    pat = args.pat
-    if not pat:
-        pat = ask_for_input("請輸入 Portainer Personal Access Token (PAT)", is_secret=True)
+    # Get Username
+    username = args.username
+    if not username:
+        username = ask_for_input("請輸入 Portainer 使用者名稱")
     
-    if not pat:
-        print_message("ERROR", "PAT 不能為空。")
+    if not username:
+        print_message("ERROR", "使用者名稱不能為空。")
+        sys.exit(1)
+    
+    # Get Password
+    password = args.password
+    if not password:
+        password = ask_for_input("請輸入 Portainer 密碼", is_secret=True)
+    
+    if not password:
+        print_message("ERROR", "密碼不能為空。")
         sys.exit(1)
     
     print_message("INFO", f"Portainer URL: {portainer_url}")
+    print_message("INFO", f"使用者名稱: {username}")
     print_message("SUCCESS", "設定完成！")
     
-    return portainer_url, pat
+    return portainer_url, username, password
+
+def authenticate_portainer(portainer_url: str, username: str, password: str) -> str:
+    """Authenticate with Portainer and get JWT token."""
+    print_message("STEP", "正在進行 Portainer 認證...")
+    
+    # Prepare authentication payload
+    auth_payload = {
+        "username": username,
+        "password": password
+    }
+    
+    try:
+        # Send authentication request
+        auth_response = requests.post(
+            f'{portainer_url}/auth',
+            json=auth_payload,
+            verify=False,
+            timeout=30
+        )
+        auth_response.raise_for_status()
+        
+        # Extract JWT token from response
+        auth_data = auth_response.json()
+        jwt_token = auth_data.get('jwt')
+        
+        if not jwt_token:
+            print_message("ERROR", "認證失敗：回應中未找到 JWT token。")
+            sys.exit(1)
+        
+        print_message("SUCCESS", "Portainer 認證成功！")
+        return jwt_token
+        
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401:
+            print_message("ERROR", "認證失敗：使用者名稱或密碼錯誤。")
+        elif e.response.status_code == 422:
+            print_message("ERROR", "認證失敗：請求格式錯誤。")
+        else:
+            print_message("ERROR", f"認證失敗：HTTP {e.response.status_code}")
+        sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        print_message("ERROR", f"認證請求失敗：{e}")
+        sys.exit(1)
 
 def main():
     """Main function to orchestrate stack updates."""
     # Get configuration
-    portainer_url, pat = get_configuration()
+    portainer_url, username, password = get_configuration()
     
-    # Prepare headers for API authentication
+    # Authenticate and get JWT token
+    jwt_token = authenticate_portainer(portainer_url, username, password)
+    
+    # Prepare headers for API authentication using JWT token
     headers = {
-        'X-API-Key': pat
+        'Authorization': f'Bearer {jwt_token}'
     }
 
     print_message("STEP", "正在連接到 Portainer 並獲取 Stacks 列表...")
