@@ -88,8 +88,8 @@ def validate_url(url: str) -> str:
     
     return url
 
-def get_configuration() -> tuple[str, str, str]:
-    """Get Portainer URL, username and password from command line args or interactive input."""
+def get_configuration() -> tuple[str, str, str, Optional[int]]:
+    """Get Portainer URL, username, password and optional endpoint filter from command line args or interactive input."""
     parser = argparse.ArgumentParser(
         description="透過 Portainer API 自動重新拉取映像並重新部署 Stacks。",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -98,12 +98,14 @@ def get_configuration() -> tuple[str, str, str]:
   {C_CYAN}參數模式:{C_RESET}
     python {sys.argv[0]} -u http://localhost:9000 -U admin -P password
     python {sys.argv[0]} --url https://portainer.example.com --username admin --password mypass
+    python {sys.argv[0]} -u http://localhost:9000 -U admin -P password -e 2  # 只更新 endpoint 2
   
   {C_CYAN}互動模式:{C_RESET}
     python {sys.argv[0]}  # 將會提示輸入所有必要資訊
   
   {C_CYAN}混合模式:{C_RESET}
     python {sys.argv[0]} -u http://localhost:9000 -U admin  # 密碼透過安全輸入
+    python {sys.argv[0]} -u http://localhost:9000 -U admin -e 1  # 只更新 endpoint 1
 """
     )
     
@@ -123,12 +125,17 @@ def get_configuration() -> tuple[str, str, str]:
         metavar="PASSWORD"
     )
     parser.add_argument(
+        "-e", "--endpoint",
+        type=int,
+        help="指定要更新的 Endpoint ID（例如: 1, 2, 3）。如未指定則更新所有 endpoints。",
+        metavar="ENDPOINT_ID"
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="啟用詳細輸出。"
     )
-    
-    args = parser.parse_args()
+      args = parser.parse_args()
     
     # Header
     print_message("HEADER", "Portainer Stack Updater v2.0")
@@ -163,11 +170,18 @@ def get_configuration() -> tuple[str, str, str]:
         print_message("ERROR", "密碼不能為空。")
         sys.exit(1)
     
+    # Get Endpoint filter (optional)
+    endpoint_filter = args.endpoint
+    if endpoint_filter is not None:
+        print_message("INFO", f"將只更新 Endpoint ID: {endpoint_filter} 的 Stacks")
+    else:
+        print_message("INFO", "將更新所有 Endpoints 的 Stacks")
+    
     print_message("INFO", f"Portainer URL: {portainer_url}")
     print_message("INFO", f"使用者名稱: {username}")
     print_message("SUCCESS", "設定完成！")
     
-    return portainer_url, username, password
+    return portainer_url, username, password, endpoint_filter
 
 def authenticate_portainer(portainer_url: str, username: str, password: str) -> str:
     """Authenticate with Portainer and get JWT token."""
@@ -215,7 +229,7 @@ def authenticate_portainer(portainer_url: str, username: str, password: str) -> 
 def main():
     """Main function to orchestrate stack updates."""
     # Get configuration
-    portainer_url, username, password = get_configuration()
+    portainer_url, username, password, endpoint_filter = get_configuration()
     
     # Authenticate and get JWT token
     jwt_token = authenticate_portainer(portainer_url, username, password)
@@ -243,11 +257,41 @@ def main():
     # Portainer API: Stack Status: 1 (active/running), 2 (inactive/stopped), ? (other states)
     active_stacks = [stack for stack in stacks if stack.get('Status') == 1]
 
+    # Apply endpoint filter if specified
+    if endpoint_filter is not None:
+        filtered_stacks = [stack for stack in active_stacks if stack.get('EndpointId') == endpoint_filter]
+        if not filtered_stacks and active_stacks:
+            print_message("WARNING", f"沒有找到 Endpoint ID {endpoint_filter} 的活動 Stacks。")
+            print_message("INFO", "可用的 Endpoint IDs:")
+            available_endpoints = set(stack.get('EndpointId') for stack in active_stacks)
+            for ep_id in sorted(available_endpoints):
+                ep_stacks = [s for s in active_stacks if s.get('EndpointId') == ep_id]
+                print_message("INFO", f"  Endpoint {ep_id}: {len(ep_stacks)} 個活動 Stacks")
+            sys.exit(0)
+        active_stacks = filtered_stacks
+        print_message("INFO", f"篩選後找到 Endpoint ID {endpoint_filter} 的 {len(active_stacks)} 個活動 Stacks。")
+
     if not active_stacks:
-        print_message("WARNING", "沒有找到處於活動狀態 (Status == 1) 的 Stacks 需要更新。")
+        if endpoint_filter is not None:
+            print_message("WARNING", f"沒有找到 Endpoint ID {endpoint_filter} 的活動狀態 (Status == 1) Stacks 需要更新。")
+        else:
+            print_message("WARNING", "沒有找到處於活動狀態 (Status == 1) 的 Stacks 需要更新。")
         sys.exit(0)
 
-    print_message("INFO", f"找到 {len(active_stacks)} 個活動 Stacks 需要更新。")
+    # Show summary of stacks to be updated
+    if endpoint_filter is not None:
+        print_message("INFO", f"準備更新 Endpoint ID {endpoint_filter} 的 {len(active_stacks)} 個活動 Stacks。")
+    else:
+        print_message("INFO", f"準備更新所有 Endpoints 的 {len(active_stacks)} 個活動 Stacks。")
+        # Show breakdown by endpoint
+        endpoint_summary = {}
+        for stack in active_stacks:
+            ep_id = stack.get('EndpointId')
+            endpoint_summary[ep_id] = endpoint_summary.get(ep_id, 0) + 1
+        
+        print_message("INFO", "各 Endpoint 的 Stack 分佈:")
+        for ep_id in sorted(endpoint_summary.keys()):
+            print_message("INFO", f"  Endpoint {ep_id}: {endpoint_summary[ep_id]} 個 Stacks")
 
     # Update each active stack
     success_count = 0
