@@ -1,451 +1,278 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-Portainer Stack Updater Script
-
-This script automates updating Portainer stacks by re-pulling images and
-redeploying them via the Portainer API.
-It supports configuration via command-line arguments, environment variables,
-or interactive prompts.
-"""
+# ==============================================================================
+# Script Name: update-stack-by-portainer.py
+# Description: Updates Portainer stacks by re-pulling images and redeploying
+#              via Portainer API. Supports interactive mode and CLI arguments.
+# Author:      TreasureBox Scripts
+# Version:     2.0.0
+# Depends:     requests
+# ==============================================================================
 
 import argparse
 import getpass
-import json
+import requests
+import urllib3
+import time
 import os
 import sys
-import time
-from typing import Any, Dict, List, Optional, Tuple
-
-try:
-    import requests
-except ImportError:
-    print(
-        "錯誤：必要的 'requests' 庫未安裝。請使用 'pip install requests' 安裝它。",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+from typing import Optional
 
 # --- Style Definitions (ANSI Escape Codes for Colors) ---
-class Colors:
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
-    RED = "\033[0;31m"
-    GREEN = "\033[0;32m"
-    YELLOW = "\033[0;33m"
-    BLUE = "\033[0;34m"
-    MAGENTA = "\033[0;35m"
-    CYAN = "\033[0;36m"
+C_RESET = "\033[0m"
+C_BOLD = "\033[1m"
+C_RED = "\033[0;31m"
+C_GREEN = "\033[0;32m"
+C_YELLOW = "\033[0;33m"
+C_BLUE = "\033[0;34m"
+C_CYAN = "\033[0;36m"
+C_MAGENTA = "\033[0;35m"
 
-# --- Configuration Defaults ---
-DEFAULT_PORTAINER_URL = ""
-DEFAULT_PORTAINER_USERNAME = ""
-DEFAULT_ENDPOINT_ID = 1
-DEFAULT_TARGET_STACK_NAME_OR_ID = ""
-
-# --- Global Configuration (will be populated) ---
-CONFIG = {
-    "portainer_url": DEFAULT_PORTAINER_URL,
-    "portainer_username": DEFAULT_PORTAINER_USERNAME,
-    "portainer_password": "", # Will be prompted if not set
-    "portainer_endpoint_id": DEFAULT_ENDPOINT_ID,
-    "target_stack": DEFAULT_TARGET_STACK_NAME_OR_ID,
-    "verbose": False,
-    "token": None,
-}
-
-# --- Helper Functions ---
+# Suppress only the single InsecureRequestWarning from urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def print_message(level: str, message: str) -> None:
-    """Prints a formatted message to the console."""
-    level_map = {
-        "INFO": f"{Colors.BLUE}[INFO]    {Colors.RESET}",
-        "SUCCESS": f"{Colors.GREEN}[SUCCESS] {Colors.RESET}",
-        "WARNING": f"{Colors.YELLOW}[WARNING] {Colors.RESET}",
-        "ERROR": f"{Colors.RED}[ERROR]   {Colors.RESET}",
-        "DEBUG": f"{Colors.MAGENTA}[DEBUG]   {Colors.RESET}",
-        "HEADER": f"{Colors.CYAN}{Colors.BOLD}=== ",
-        "STEP": f"{Colors.YELLOW}{Colors.BOLD}--- ",
+    """Print formatted message with color coding."""
+    colors = {
+        'INFO': C_BLUE,
+        'SUCCESS': C_GREEN,
+        'WARNING': C_YELLOW,
+        'ERROR': C_RED,
+        'HEADER': C_CYAN + C_BOLD,
+        'STEP': C_MAGENTA
     }
-    prefix = level_map.get(level.upper(), "")
     
-    if level.upper() == "DEBUG" and not CONFIG["verbose"]:
-        return
-
-    output_stream = sys.stderr if level.upper() == "ERROR" else sys.stdout
+    prefix_map = {
+        'INFO': '[INFO]    ',
+        'SUCCESS': '[SUCCESS] ',
+        'WARNING': '[WARNING] ',
+        'ERROR': '[ERROR]   ',
+        'HEADER': '=== ',
+        'STEP': '--- '
+    }
     
-    if level.upper() in ["HEADER", "STEP"]:
-        print(f"{prefix}{message}{Colors.RESET}", file=output_stream)
-    else:
-        print(f"{prefix}{message}", file=output_stream)
-
-
-def show_progress_bar(
-    current: int, total: int, action_message: str = "Processing"
-) -> None:
-    """Displays or updates a simple text progress bar."""
-    if total == 0:
-        print(f"{Colors.GREEN}{action_message}: 0/0 (100%){Colors.RESET}")
-        return
-
-    bar_width = 40
-    percentage = (current / total) * 100
-    filled_length = int(bar_width * current // total)
+    color = colors.get(level.upper(), C_RESET)
+    prefix = prefix_map.get(level.upper(), f'[{level.upper()}] ')
     
-    bar = "=" * filled_length
-    if filled_length < bar_width and current != total :
-        bar += ">"
-    bar += " " * (bar_width - filled_length - (1 if filled_length < bar_width and current != total else 0) )
+    stream = sys.stderr if level.upper() == 'ERROR' else sys.stdout
+    print(f"{color}{prefix}{message}{C_RESET}", file=stream)
 
-    sys.stdout.write(
-        f"\r{Colors.GREEN}{action_message}: [{bar}] {percentage:.1f}% ({current}/{total}){Colors.RESET}"
-    )
-    sys.stdout.flush()
-    if current == total:
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-
-def ask_for_input(prompt_message: str, var_desc: str, is_secret: bool = False) -> str:
-    """Prompts the user for input."""
-    prompt = f"{Colors.YELLOW}{prompt_message}:{Colors.RESET} "
+def ask_for_input(prompt: str, is_secret: bool = False) -> str:
+    """Prompt user for input with optional password masking."""
+    full_prompt = f"{C_YELLOW}{prompt}:{C_RESET} "
+    
     if is_secret:
-        value = getpass.getpass(prompt)
+        value = getpass.getpass(full_prompt)
     else:
-        value = input(prompt)
+        value = input(full_prompt)
     
-    if not value:
-        print_message("WARNING", f"{var_desc} 未提供。腳本可能無法正常運作。")
-    return value
+    return value.strip()
 
-def validate_and_normalize_url(url: str) -> Optional[str]:
-    """Validates URL format and removes trailing slash."""
-    if not url.startswith(("http://", "https://")):
-        print_message("ERROR", f"Portainer URL '{Colors.BOLD}{url}{Colors.RESET}' 格式無效。應以 http:// 或 https:// 開頭。")
-        return None
-    return url.rstrip("/")
-
-# --- Portainer API Functions ---
-
-def get_portainer_token() -> bool:
-    """Authenticates with Portainer and retrieves a JWT token."""
-    print_message("STEP", "正在從 Portainer 獲取認證 Token...")
-    api_url = f"{CONFIG['portainer_url']}/api/auth"
-    payload = {
-        "username": CONFIG["portainer_username"],
-        "password": CONFIG["portainer_password"],
-    }
-    headers = {"Content-Type": "application/json"}
-
-    try:
-        response = requests.post(api_url, json=payload, headers=headers, timeout=10)
-        response.raise_for_status()  # Raises HTTPError for bad responses (4XX or 5XX)
-        
-        token_data = response.json()
-        CONFIG["token"] = token_data.get("jwt")
-
-        if not CONFIG["token"]:
-            print_message("ERROR", "從 Portainer API 回應中提取 Token 失敗。")
-            print_message("DEBUG", f"Portainer 回應: {response.text}")
-            return False
-        
-        print_message("SUCCESS", "成功獲取 Portainer Token！")
-        # Securely clear password from memory after use
-        CONFIG["portainer_password"] = "" 
-        return True
-
-    except requests.exceptions.HTTPError as e:
-        print_message("ERROR", f"獲取 Portainer Token 失敗！HTTP 狀態碼: {Colors.BOLD}{e.response.status_code}{Colors.RESET}")
-        if e.response.status_code == 401:
-            print_message("ERROR", "請檢查你的 Portainer 使用者名稱和密碼是否正確。")
-        try:
-            error_details = e.response.json()
-            print_message("DEBUG", f"Portainer 錯誤詳情: {error_details}")
-        except json.JSONDecodeError:
-            print_message("DEBUG", f"Portainer 回應 (非 JSON): {e.response.text}")
-        return False
-    except requests.exceptions.RequestException as e:
-        print_message("ERROR", f"無法連接到 Portainer URL: {Colors.BOLD}{CONFIG['portainer_url']}{Colors.RESET}。錯誤: {e}")
-        return False
-
-def get_stacks() -> Optional[List[Dict[str, Any]]]:
-    """Fetches stacks from Portainer."""
-    endpoint_id = CONFIG["portainer_endpoint_id"]
-    target_stack = CONFIG["target_stack"]
+def validate_url(url: str) -> str:
+    """Validate and normalize Portainer URL."""
+    if not url:
+        return ""
     
-    if target_stack:
-        print_message("INFO", f"正在從 Endpoint ID: {endpoint_id} 獲取 Stack: {Colors.BOLD}{target_stack}{Colors.RESET}...")
-    else:
-        print_message("INFO", f"正在從 Endpoint ID: {endpoint_id} 獲取所有 Stacks...")
+    # Remove trailing slash
+    url = url.rstrip("/")
+    
+    # Check if URL starts with http:// or https://
+    if not (url.startswith("http://") or url.startswith("https://")):
+        print_message("ERROR", f"URL '{url}' 格式無效。應以 http:// 或 https:// 開頭。")
+        return ""
+    
+    # Ensure URL ends with /api for Portainer API
+    if not url.endswith("/api"):
+        url += "/api"
+    
+    return url
 
-    api_url = f"{CONFIG['portainer_url']}/api/endpoints/{endpoint_id}/stacks"
-    headers = {"Authorization": f"Bearer {CONFIG['token']}"}
-
-    try:
-        response = requests.get(api_url, headers=headers, timeout=15)
-        response.raise_for_status()
-        all_stacks = response.json()
-
-        if not isinstance(all_stacks, list):
-            print_message("ERROR", "從 Portainer API 獲取的 Stacks 格式不正確 (非列表)。")
-            print_message("DEBUG", f"Portainer 回應: {all_stacks}")
-            return None
-
-        if target_stack:
-            found_stacks = []
-            for stack in all_stacks:
-                if str(stack.get("Id", "")) == target_stack or stack.get("Name", "") == target_stack:
-                    found_stacks.append(stack)
-            
-            if not found_stacks:
-                print_message("WARNING", f"在 Endpoint ID {endpoint_id} 中找不到名為或 ID 為 '{Colors.BOLD}{target_stack}{Colors.RESET}' 的 Stack。")
-                return [] # Return empty list if specific stack not found
-            return found_stacks
-        return all_stacks
-
-    except requests.exceptions.HTTPError as e:
-        print_message("ERROR", f"獲取 Stacks 列表失敗！HTTP 狀態碼: {Colors.BOLD}{e.response.status_code}{Colors.RESET}")
-        try:
-            print_message("DEBUG", f"Portainer 錯誤詳情: {e.response.json()}")
-        except json.JSONDecodeError:
-            print_message("DEBUG", f"Portainer 回應 (非 JSON): {e.response.text}")
-        return None
-    except requests.exceptions.RequestException as e:
-        print_message("ERROR", f"請求 Stacks 列表時網路錯誤或無法連接到 Portainer。錯誤: {e}")
-        return None
-
-def get_stack_details(stack_id: int) -> Optional[Dict[str, Any]]:
-    """Fetches detailed information for a specific stack."""
-    print_message("DEBUG", f"正在獲取 Stack ID: {stack_id} 的詳細資訊...")
-    api_url = f"{CONFIG['portainer_url']}/api/stacks/{stack_id}"
-    headers = {"Authorization": f"Bearer {CONFIG['token']}"}
-
-    try:
-        response = requests.get(api_url, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        print_message("ERROR", f"獲取 Stack ID: {stack_id} 的詳細資訊失敗！HTTP 狀態碼: {Colors.BOLD}{e.response.status_code}{Colors.RESET}")
-        try:
-            print_message("DEBUG", f"Portainer 錯誤詳情: {e.response.json()}")
-        except json.JSONDecodeError:
-            print_message("DEBUG", f"Portainer 回應 (非 JSON): {e.response.text}")
-        return None
-    except requests.exceptions.RequestException as e:
-        print_message("ERROR", f"請求 Stack ID {stack_id} 詳細資訊時網路錯誤。錯誤: {e}")
-        return None
-
-def update_stack_and_pull_image(stack_id: int, endpoint_id: int, stack_details: Dict[str, Any]) -> bool:
-    """Updates a stack in Portainer, instructing it to re-pull images."""
-    stack_name = stack_details.get("Name", f"ID {stack_id}")
-    stack_type = stack_details.get("Type") # 1: Compose, 2: Swarm, 3: Kubernetes
-
-    print_message("INFO", f"準備更新 Stack: {Colors.BOLD}{stack_name}{Colors.RESET} (ID: {stack_id}, Type: {stack_type})...")
-
-    api_url = f"{CONFIG['portainer_url']}/api/stacks/{stack_id}?endpointId={endpoint_id}"
-    headers = {
-        "Authorization": f"Bearer {CONFIG['token']}",
-        "Content-Type": "application/json",
-    }
-
-    # Construct payload - This is critical and might need adjustments based on Portainer version/stack type
-    payload: Dict[str, Any] = {}
-    prune_services = False # Default
-
-    if stack_type in [1, 2]: # Docker Compose (1) or Swarm (2)
-        stack_file_content = stack_details.get("StackFileContent", "")
-        env_vars = stack_details.get("Env", []) # Ensure Env is a list
-
-        if not stack_file_content and stack_type == 1: # For Type 1, StackFileContent is usually expected
-             print_message("WARNING", f"Stack {stack_name} (ID: {stack_id}) 的 StackFileContent 為空。這可能是一個從 Git 部署的 Stack，或者存在問題。")
-        
-        payload = {
-            "StackFileContent": stack_file_content,
-            "Env": env_vars if isinstance(env_vars, list) else [], # Ensure it's a list
-            "PullImage": True,
-            "PruneServices": prune_services,
-        }
-        if stack_type == 2 : # Swarm specific, if any. Often the same payload as compose works.
-            print_message("INFO", "為 Swarm Stack (Type 2) 準備 Payload。此更新方式主要針對 Compose 最佳化。")
-
-    else: # Fallback for Kubernetes or unknown types
-        print_message("WARNING", f"Stack {stack_name} (ID: {stack_id}) 是未知或目前不支持精細控制的類型 (Type: {stack_type})。將嘗試通用更新請求 (僅 PullImage: true)...")
-        payload = {"PullImage": True} # Minimal payload
-
-    print_message("DEBUG", f"將使用以下 Payload 更新 Stack ID {stack_id}:\n{json.dumps(payload, indent=2)}")
-
-    try:
-        response = requests.put(api_url, json=payload, headers=headers, timeout=180) # Longer timeout for redeploy
-        # Portainer API for stack update (PUT) typically returns 200 OK or 204 No Content
-        if response.status_code == 200 or response.status_code == 204:
-            print_message("SUCCESS", f"Stack {Colors.BOLD}{stack_name}{Colors.RESET} (ID: {stack_id}) 已成功觸發更新 (重新拉取映像並重新部署)！")
-            return True
-        else:
-            response.raise_for_status() # Will raise HTTPError for other non-200/204 codes
-            return False # Should not be reached if raise_for_status works
-            
-    except requests.exceptions.HTTPError as e:
-        print_message("ERROR", f"更新 Stack {Colors.BOLD}{stack_name}{Colors.RESET} (ID: {stack_id}) 失敗！HTTP 狀態碼: {Colors.BOLD}{e.response.status_code}{Colors.RESET}")
-        try:
-            error_details = e.response.json()
-            err_msg = error_details.get("message", error_details.get("details", str(error_details)))
-            print_message("ERROR", f"Portainer 錯誤訊息: {err_msg}")
-            print_message("DEBUG", f"Portainer 完整錯誤詳情: {error_details}")
-        except json.JSONDecodeError:
-            print_message("DEBUG", f"Portainer 回應 (非 JSON): {e.response.text}")
-        return False
-    except requests.exceptions.RequestException as e:
-        print_message("ERROR", f"更新 Stack {Colors.BOLD}{stack_name}{Colors.RESET} (ID: {stack_id}) 時網路錯誤。錯誤: {e}")
-        return False
-
-# --- Main Logic ---
-
-def main():
-    """Main execution flow of the script."""
+def get_configuration() -> tuple[str, str]:
+    """Get Portainer URL and PAT from command line args or interactive input."""
     parser = argparse.ArgumentParser(
-        description="Portainer Stack Updater: Re-pulls images and redeploys stacks.",
+        description="透過 Portainer API 自動重新拉取映像並重新部署 Stacks。",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=f"""
-環境變數 (優先於提示輸入，但低於命令行參數):
-  {Colors.CYAN}PORTAINER_URL{Colors.RESET}         Portainer 服務的 URL
-  {Colors.CYAN}PORTAINER_USERNAME{Colors.RESET}    Portainer 使用者名稱
-  {Colors.CYAN}PORTAINER_PASSWORD{Colors.RESET}    Portainer 密碼
-  {Colors.CYAN}PORTAINER_ENDPOINT_ID{Colors.RESET} Portainer Endpoint ID (預設: {DEFAULT_ENDPOINT_ID})
-
-範例:
-  python {sys.argv[0]} -u http://localhost:9000 -U admin -e 1 my_awesome_stack
-  PORTAINER_PASSWORD='mypass' python {sys.argv[0]} --url https://portainer.example.com --username myuser --stack 123
-  python {sys.argv[0]} # (將會提示輸入所有必要資訊)
+使用範例:
+  {C_CYAN}參數模式:{C_RESET}
+    python {sys.argv[0]} -u http://localhost:9000 -p your_pat_token
+    python {sys.argv[0]} --url https://portainer.example.com --pat your_token
+  
+  {C_CYAN}互動模式:{C_RESET}
+    python {sys.argv[0]}  # 將會提示輸入所有必要資訊
 """
     )
+    
     parser.add_argument(
-        "-u", "--url", help="Portainer 服務的 URL。"
+        "-u", "--url",
+        help="Portainer 服務的 URL (例如: http://localhost:9000)。",
+        metavar="URL"
     )
     parser.add_argument(
-        "-U", "--username", help="Portainer 使用者名稱。"
+        "-p", "--pat",
+        help="Portainer 個人存取權杖 (PAT)。",
+        metavar="TOKEN"
     )
     parser.add_argument(
-        "-P", "--password", help="Portainer 密碼 (建議使用環境變數或提示輸入)。"
+        "-v", "--verbose",
+        action="store_true",
+        help="啟用詳細輸出。"
     )
-    parser.add_argument(
-        "-e", "--endpoint-id", type=int, help=f"Portainer Endpoint ID (預設: {DEFAULT_ENDPOINT_ID})。"
-    )
-    parser.add_argument(
-        "-s", "--stack", help="要更新的特定 Stack 的名稱或 ID。如果未提供，則更新所有 Stacks。"
-    )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="啟用詳細輸出 (Debug 訊息)。"
-    )
-    parser.add_argument(
-        "stack_name_or_id_pos", nargs="?", default=None,
-        help="要更新的特定 Stack 的名稱或 ID (位置參數，如果 -s 未使用)。"
-    )
+    
     args = parser.parse_args()
-
-    # --- Populate Configuration (Priority: Args > Env Vars > Interactive Prompts) ---
-    CONFIG["verbose"] = args.verbose
-
-    print_message("HEADER", "Portainer Stack Updater (Python Version)")
+    
+    # Header
+    print_message("HEADER", "Portainer Stack Updater v2.0")
     print("--------------------------------------------------")
-    print_message("STEP", "正在設定腳本參數...")
-
-    CONFIG["portainer_url"] = args.url or os.getenv("PORTAINER_URL") or \
-        ask_for_input("請輸入 Portainer URL (例如 http://localhost:9000)", "Portainer URL")
     
-    validated_url = validate_and_normalize_url(CONFIG["portainer_url"])
-    if not validated_url:
-        sys.exit(1)
-    CONFIG["portainer_url"] = validated_url
-
-    CONFIG["portainer_username"] = args.username or os.getenv("PORTAINER_USERNAME") or \
-        ask_for_input("請輸入 Portainer 使用者名稱", "Portainer 使用者名稱")
-
-    CONFIG["portainer_password"] = args.password or os.getenv("PORTAINER_PASSWORD") or \
-        ask_for_input("請輸入 Portainer 密碼", "Portainer 密碼", is_secret=True)
+    # Get Portainer URL
+    portainer_url = args.url
+    if not portainer_url:
+        print_message("STEP", "設定 Portainer 連線資訊")
+        portainer_url = ask_for_input("請輸入 Portainer URL (例如 http://localhost:9000)")
     
-    env_endpoint_id = os.getenv("PORTAINER_ENDPOINT_ID")
-    CONFIG["portainer_endpoint_id"] = args.endpoint_id or \
-        (int(env_endpoint_id) if env_endpoint_id and env_endpoint_id.isdigit() else None) or \
-        DEFAULT_ENDPOINT_ID
-    
-    CONFIG["target_stack"] = args.stack or args.stack_name_or_id_pos or os.getenv("PORTAINER_TARGET_STACK") or \
-        DEFAULT_TARGET_STACK_NAME_OR_ID
-    # No interactive prompt for target_stack, default is all.
-
-    print_message("DEBUG", f"最終配置 (密碼已隱藏): URL={CONFIG['portainer_url']}, User={CONFIG['portainer_username']}, EndpointID={CONFIG['portainer_endpoint_id']}, TargetStack='{CONFIG['target_stack']}'")
-
-    # --- Main Script Logic ---
-    if not get_portainer_token():
-        print_message("ERROR", "無法獲取 Portainer Token。腳本終止。")
-        sys.exit(1)
-
-    stacks_to_update = get_stacks()
-
-    if stacks_to_update is None: # API call failed
-        print_message("ERROR", "無法獲取 Stacks 列表。腳本終止。")
+    portainer_url = validate_url(portainer_url)
+    if not portainer_url:
+        print_message("ERROR", "無效的 Portainer URL。")
         sys.exit(1)
     
-    if not stacks_to_update:
-        print_message("INFO", "沒有找到符合條件的 Stacks 需要更新。")
+    # Get PAT
+    pat = args.pat
+    if not pat:
+        pat = ask_for_input("請輸入 Portainer Personal Access Token (PAT)", is_secret=True)
+    
+    if not pat:
+        print_message("ERROR", "PAT 不能為空。")
+        sys.exit(1)
+    
+    print_message("INFO", f"Portainer URL: {portainer_url}")
+    print_message("SUCCESS", "設定完成！")
+    
+    return portainer_url, pat
+
+def main():
+    """Main function to orchestrate stack updates."""
+    # Get configuration
+    portainer_url, pat = get_configuration()
+    
+    # Prepare headers for API authentication
+    headers = {
+        'X-API-Key': pat
+    }
+
+    print_message("STEP", "正在連接到 Portainer 並獲取 Stacks 列表...")
+    
+    try:
+        # Get the list of all stacks from Portainer
+        # verify=False disables SSL certificate verification. Use with caution.
+        stacks_response = requests.get(f'{portainer_url}/stacks', headers=headers, verify=False, timeout=30)
+        stacks_response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        stacks = stacks_response.json()
+        print_message("SUCCESS", f"成功獲取 {len(stacks)} 個 Stacks。")
+
+    except requests.exceptions.RequestException as e:
+        print_message("ERROR", f"連接到 Portainer 或獲取 Stacks 失敗: {e}")
+        sys.exit(1)
+
+    # Filter only active stacks (Status == 1 typically means running/active)
+    # Portainer API: Stack Status: 1 (active/running), 2 (inactive/stopped), ? (other states)
+    active_stacks = [stack for stack in stacks if stack.get('Status') == 1]
+
+    if not active_stacks:
+        print_message("WARNING", "沒有找到處於活動狀態 (Status == 1) 的 Stacks 需要更新。")
         sys.exit(0)
 
-    print_message("STEP", f"找到 {len(stacks_to_update)} 個 Stacks 需要處理。")
+    print_message("INFO", f"找到 {len(active_stacks)} 個活動 Stacks 需要更新。")
+
+    # Update each active stack
+    success_count = 0
+    total_count = len(active_stacks)
     
-    successful_updates = 0
-    failed_updates = 0
-    total_stacks = len(stacks_to_update)
+    for i, stack in enumerate(active_stacks, 1):
+        stack_id = stack['Id']
+        stack_name = stack['Name']
+        endpoint_id = stack['EndpointId']  # Get the endpoint ID for the stack
 
-    for index, stack_summary in enumerate(stacks_to_update):
-        stack_id = stack_summary.get("Id")
-        stack_name = stack_summary.get("Name", f"ID {stack_id}")
-        
-        show_progress_bar(index, total_stacks, f"處理 Stack: {Colors.BOLD}{stack_name}{Colors.RESET}")
+        print(f"\n{C_MAGENTA}----------------------------------------------------{C_RESET}")
+        print_message("STEP", f"處理 Stack {i}/{total_count}: {C_CYAN}{stack_name}{C_RESET} (ID: {stack_id}, EndpointID: {endpoint_id})")
+        start_time = time.time()  # Record the start time for this stack update
 
-        if not stack_id:
-            print_message("WARNING", f"Stack '{stack_name}' 缺少 ID，跳過。")
-            failed_updates += 1
-            continue
+        try:
+            # Get the current stack details to preserve its configuration (like Env vars and StackFileContent)
+            print_message("INFO", f"正在獲取 Stack '{stack_name}' 的詳細資訊...")
+            stack_details_response = requests.get(f'{portainer_url}/stacks/{stack_id}', headers=headers, verify=False, timeout=30)
+            stack_details_response.raise_for_status()
+            stack_details = stack_details_response.json()
+            print_message("SUCCESS", f"成功獲取 Stack '{stack_name}' 的詳細資訊。")
 
-        stack_details = get_stack_details(stack_id)
-        if not stack_details:
-            print_message("WARNING", f"無法獲取 Stack '{stack_name}' (ID: {stack_id}) 的詳細資訊，跳過更新。")
-            failed_updates += 1
-            continue
-        
-        # Add a small delay to avoid overwhelming the API, and for progress bar visibility
-        time.sleep(0.1) 
+            # Prepare the update payload
+            # 'PullImage': True is crucial for forcing Portainer to re-pull the latest images for the services in the stack.
+            update_payload = {
+                'PullImage': True,
+                'PruneServices': stack_details.get('PruneServices', False), # Preserve existing PruneServices setting or default to False
+                'Env': stack_details.get('Env', [])  # Preserve existing environment variables
+            }
 
-        if update_stack_and_pull_image(stack_id, stack_details.get("EndpointId", CONFIG["portainer_endpoint_id"]), stack_details):
-            successful_updates += 1
-        else:
-            failed_updates += 1
-        
-        # Ensure progress bar for the last item is fully displayed before summary
-        if index == total_stacks -1 :
-            show_progress_bar(index + 1, total_stacks, f"處理 Stack: {Colors.BOLD}{stack_name}{Colors.RESET}")
+            # Add StackFileContent if it exists in the primary details
+            # This is the Docker Compose file content.
+            if 'StackFileContent' in stack_details and stack_details['StackFileContent']:
+                update_payload['StackFileContent'] = stack_details['StackFileContent']
+                print_message("INFO", "使用主要詳細資訊中的 StackFileContent。")
+            else:
+                # If StackFileContent is not directly available (e.g., for Swarm stacks or if API response is minimal),
+                # try to retrieve it from the dedicated '/file' endpoint.
+                print_message("WARNING", f"主要詳細資訊中沒有 StackFileContent，嘗試從 /api/stacks/{stack_id}/file 端點獲取...")
+                try:
+                    stack_file_response = requests.get(f'{portainer_url}/stacks/{stack_id}/file', headers=headers, verify=False, timeout=30)
+                    stack_file_response.raise_for_status()
+                    stack_file_data = stack_file_response.json()
+                    stack_file_content = stack_file_data.get('StackFileContent')
+                    if stack_file_content:
+                        update_payload['StackFileContent'] = stack_file_content
+                        print_message("SUCCESS", "成功從 /file 端點獲取 StackFileContent。")
+                    else:
+                        print_message("WARNING", f"無法獲取 Stack '{stack_name}' 的 StackFileContent。更新可能無法按預期工作。")
+                except requests.exceptions.RequestException as e:
+                    print_message("WARNING", f"從 /file 端點獲取 StackFileContent 失敗: {e}")
 
+            # Update the stack: Send a PUT request to the Portainer API
+            # The endpointId is passed as a query parameter for the PUT request.
+            print_message("INFO", f"正在發送更新請求給 Stack '{stack_name}' (PullImage=True)...")
+            update_url = f'{portainer_url}/stacks/{stack_id}?endpointId={endpoint_id}'
+            update_response = requests.put(update_url, headers=headers, json=update_payload, verify=False, timeout=120) # Increased timeout for update
+            update_response.raise_for_status() # Will raise an exception for 4xx/5xx status codes
 
-    print("\n--------------------------------------------------")
-    print_message("HEADER", "更新完成總結")
-    print_message("SUCCESS", f"成功更新的 Stacks 數量: {successful_updates}")
-    if failed_updates > 0:
-        print_message("ERROR", f"更新失敗的 Stacks 數量: {failed_updates}")
+            end_time = time.time()  # Record the end time
+            duration = end_time - start_time  # Calculate the duration
+            success_count += 1
+            print_message("SUCCESS", f"Stack {C_CYAN}{stack_name}{C_RESET} 在 {duration:.2f} 秒內成功更新！")
+
+        except requests.exceptions.HTTPError as err:
+            print_message("ERROR", f"更新 Stack {C_CYAN}{stack_name}{C_RESET} 時發生 HTTP 錯誤: {err}")
+            if err.response is not None:
+                try:
+                    error_details = err.response.json()
+                    print_message("ERROR", f"API 回應: {error_details}")
+                except ValueError: # If response body is not JSON
+                    print_message("ERROR", f"API 回應 (非JSON): {err.response.text[:300]}...")
+        except requests.exceptions.RequestException as e:
+            print_message("ERROR", f"更新 Stack {C_CYAN}{stack_name}{C_RESET} 時發生網路錯誤: {e}")
+        except Exception as e:
+            print_message("ERROR", f"更新 Stack {C_CYAN}{stack_name}{C_RESET} 時發生未預期錯誤: {e}")
+
+    print(f"\n{C_MAGENTA}============================================================{C_RESET}")
+    print_message("HEADER", f"Stack 更新完成報告")
+    print_message("INFO", f"總計處理: {total_count} 個 Stacks")
+    print_message("SUCCESS", f"成功更新: {success_count} 個 Stacks")
+    if success_count < total_count:
+        print_message("WARNING", f"失敗或跳過: {total_count - success_count} 個 Stacks")
+    
+    if success_count == total_count:
+        print_message("SUCCESS", "所有活動 Stacks 已成功更新！")
     else:
-        print_message("INFO", f"更新失敗的 Stacks 數量: {failed_updates}")
-    print("--------------------------------------------------")
+        print_message("WARNING", "部分 Stacks 更新失敗，請檢查上述錯誤訊息。")
 
-    if failed_updates > 0:
-        sys.exit(1) # Exit with error code if any stack failed
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print_message("\nINFO", "腳本被使用者中斷。")
-        sys.exit(130) # Standard exit code for Ctrl+C
-    except Exception as e:
-        print_message("ERROR", f"發生未預期的錯誤: {e}")
-        if CONFIG.get("verbose"):
-            import traceback
-            traceback.print_exc()
-        sys.exit(1)
+    main()
