@@ -16,9 +16,3 @@ Options=multichannel,vers=3,rw,mfsymlinks,echo_interval=300,username=df,password
 
 [Install]
 WantedBy=multi-user.target
-
-[Service]
-# 重試設定
-Restart=on-failure
-RestartSec=30
-TimeoutSec=60
