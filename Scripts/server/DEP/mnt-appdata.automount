@@ -1,0 +1,13 @@
+[Unit]
+Description=Automount for appdata
+DefaultDependencies=no
+Requires=network-online.target
+After=network-online.target
+Before=remote-fs.target
+
+[Automount]
+Where=/mnt/appdata
+TimeoutIdleSec=600
+
+[Install]
+WantedBy=multi-user.target

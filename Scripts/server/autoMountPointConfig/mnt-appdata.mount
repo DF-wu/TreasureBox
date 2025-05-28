@@ -1,0 +1,24 @@
+[Unit]
+Description=NFS Mount for appdata
+DefaultDependencies=no
+Requires=network-online.target
+After=network-online.target
+Before=remote-fs.target
+# 增加重試機制
+StartLimitIntervalSec=0
+StartLimitBurst=5
+
+[Mount]
+What=truenas:/mnt/cachePool/appdata
+Where=/mnt/appdata
+Type=nfs
+Options=nfsvers=4,rw,noatime,rsize=32768,wsize=32768
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+# 重試設定
+Restart=on-failure
+RestartSec=30
+TimeoutSec=60

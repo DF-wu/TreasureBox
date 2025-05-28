@@ -1,0 +1,24 @@
+[Unit]
+Description=CIFS Mount for ncdata   (actually in mydata)
+DefaultDependencies=no
+Requires=network-online.target
+After=network-online.target
+Before=remote-fs.target
+# 增加重試機制
+StartLimitIntervalSec=0
+StartLimitBurst=5
+
+[Mount]
+What=//truenas/ncdata
+Where=/mnt/ncdata
+Type=cifs
+Options=multichannel,vers=3,rw,mfsymlinks,echo_interval=300,username=df,password=0,file_mode=0777,dir_mode=0777
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+# 重試設定
+Restart=on-failure
+RestartSec=30
+TimeoutSec=60
