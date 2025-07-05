@@ -24,8 +24,8 @@
 @REM value:
 @REM     - 15 = auto
 @REM     - 16 = DP
-@REM     - 17 = HDMI 1 macos
-@REM     - 18 = HDMI 2 windows
+@REM     - 17 = HDMI 1 windows
+@REM     - 18 = HDMI 2 macOS
 
 @echo off
 setlocal EnableExtensions
@@ -53,7 +53,7 @@ echo [INFO] 正在將螢幕切換至 Windows 輸入源...
 echo.
 
 REM 切換主螢幕 (AG275UXM) 到 HDMI 2 (值: 18)
-"%CMM_PATH%" /SetValue "%PRIMARY_DISPLAY%" 60 18
+"%CMM_PATH%" /SetValue "%PRIMARY_DISPLAY%" 60 17
 echo [OK] 主螢幕 (AG275UXM) 已設定為 HDMI 2.
 
 REM 切換副螢幕 (P2712V) 到 DP (值: 15)
