@@ -52,7 +52,7 @@ echo.
 echo [INFO] 正在將螢幕切換至 Windows 輸入源...
 echo.
 
-REM 切換主螢幕 (AG275UXM) 到 HDMI 2 (值: 18)
+REM 切換主螢幕 (AG275UXM) 到 17 = HDMI 1 windows
 "%CMM_PATH%" /SetValue "%PRIMARY_DISPLAY%" 60 17
 echo [OK] 主螢幕 (AG275UXM) 已設定為 HDMI 2.
 
