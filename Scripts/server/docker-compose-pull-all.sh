@@ -7,13 +7,31 @@
 # =============================================================================
 # 腳本名稱：docker_pull.sh
 # 功能描述：自動遍歷指定資料夾下的Docker Compose服務，執行docker-compose pull，
-#           支援多線程、色彩高亮，適用於crontab執行。
-# 使用方法：
-#   ./docker_pull.sh -d /path/to/myservices -t 4 -l /path/to/logfile.log
-# 參數：
-#   -d, --directory    指定包含Docker Compose服務的主目錄 (預設為當前目錄)
-#   -t, --threads      指定同時執行的線程數量 (預設為4)
-#   -l, --log           指定日誌檔案路徑 (預設為./docker_pull.log)
+#           支援多線程、色彩高亮、條件更新，適用於crontab執行。
+#
+# 使用方法與範例：
+#
+# 1. 基本用法 (在當前目錄尋找服務，使用預設4個線程):
+#    ./docker_pull.sh
+#
+# 2. 指定服務目錄與線程數:
+#    ./docker_pull.sh -d /path/to/all/services -t 8
+#
+# 3. 只更新正在運行的服務:
+#    ./docker_pull.sh --running-only
+#
+# 4. 指定日誌檔案，並只更新指定目錄下正在運行的服務:
+#    ./docker_pull.sh -d /opt/docker-services --running-only -l /var/log/docker_pull.log
+#
+# 5. 顯示幫助訊息:
+#    ./docker_pull.sh -h
+#
+# 參數說明：
+#   -d, --directory    指定包含Docker Compose服務的主目錄 (預設: ".")
+#   -t, --threads      指定同時執行的線程數量 (預設: 4)
+#   -l, --log          指定日誌檔案路徑 (預設: "./docker_pull.log")
+#       --running-only 如果設置此旗標，則只更新有正在運行容器的服務。
+#   -h, --help         顯示此幫助訊息。
 # =============================================================================
 
 # =============================================================================
@@ -24,6 +42,7 @@
 DIRECTORY="."
 THREADS=4
 LOGFILE="./docker_pull.log"
+RUNNING_ONLY=false
 
 # 色彩定義 (僅在終端支援時顯示顏色)
 if [ -t 1 ]; then
@@ -44,10 +63,11 @@ fi
 
 # 顯示幫助訊息
 usage() {
-    echo "Usage: $0 [-d directory] [-t threads] [-l logfile]"
+    echo "Usage: $0 [-d directory] [-t threads] [-l logfile] [--running-only]"
     echo "  -d, --directory    指定包含Docker Compose服務的主目錄 (預設為當前目錄)"
     echo "  -t, --threads      指定同時執行的線程數量 (預設為4)"
     echo "  -l, --log          指定日誌檔案路徑 (預設為./docker_pull.log)"
+    echo "      --running-only 只更新有正在運行容器的服務"
     exit 1
 }
 
@@ -55,25 +75,28 @@ usage() {
 parse_args() {
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            -d|--directory)
-                DIRECTORY="$2"
-                shift
-                ;;
-            -t|--threads)
-                THREADS="$2"
-                shift
-                ;;
-            -l|--log)
-                LOGFILE="$2"
-                shift
-                ;;
-            -h|--help)
-                usage
-                ;;
-            *)
-                echo -e "${RED}Unknown parameter passed: $1${NC}"
-                usage
-                ;;
+        -d | --directory)
+            DIRECTORY="$2"
+            shift
+            ;;
+        -t | --threads)
+            THREADS="$2"
+            shift
+            ;;
+        -l | --log)
+            LOGFILE="$2"
+            shift
+            ;;
+        -h | --help)
+            usage
+            ;;
+        --running-only)
+            RUNNING_ONLY=true
+            ;;
+        *)
+            echo -e "${RED}Unknown parameter passed: $1${NC}"
+            usage
+            ;;
         esac
         shift
     done
@@ -90,19 +113,38 @@ pull_images() {
     local dir="$1"
     local service_name
     service_name=$(basename "$dir")
-    
+
     log "${YELLOW}開始更新服務：$service_name${NC}"
-    
+
     # 進入服務目錄
-    cd "$dir" || { log "${RED}無法進入目錄：$dir${NC}"; return; }
-    
+    cd "$dir" || {
+        log "${RED}無法進入目錄：$dir${NC}"
+        return
+    }
+
     # 檢查docker-compose檔案
     if [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
-        docker-compose pull >> "$LOGFILE" 2>&1
-        if [ $? -eq 0 ]; then
-            log "${GREEN}成功更新服務：$service_name${NC}"
+        if [ "$RUNNING_ONLY" = true ]; then
+            # 檢查是否有正在運行的容器
+            if [ -n "$(docker-compose ps -q)" ]; then
+                log "${YELLOW}服務 $service_name 有正在運行的容器，開始更新...${NC}"
+                docker-compose pull >>"$LOGFILE" 2>&1
+                if [ $? -eq 0 ]; then
+                    log "${GREEN}成功更新服務：$service_name${NC}"
+                else
+                    log "${RED}更新服務失敗：$service_name${NC}"
+                fi
+            else
+                log "${YELLOW}服務 $service_name 沒有正在運行的容器，已跳過。${NC}"
+            fi
         else
-            log "${RED}更新服務失敗：$service_name${NC}"
+            # 未啟用 --running-only flag，直接更新
+            docker-compose pull >>"$LOGFILE" 2>&1
+            if [ $? -eq 0 ]; then
+                log "${GREEN}成功更新服務：$service_name${NC}"
+            else
+                log "${RED}更新服務失敗：$service_name${NC}"
+            fi
         fi
     else
         log "${RED}在 $dir 中未找到 docker-compose.yml 或 docker-compose.yaml${NC}"
@@ -124,7 +166,7 @@ wait_for_threads() {
 parse_args "$@"
 
 # 初始化日誌文件
-echo "======== Docker Pull運行於 $(date) ========" >> "$LOGFILE"
+echo "======== Docker Pull運行於 $(date) ========" >>"$LOGFILE"
 
 # 檢查目錄是否存在
 if [ ! -d "$DIRECTORY" ]; then
@@ -151,7 +193,7 @@ fi
 for dir in "${SERVICE_DIRS[@]}"; do
     # 等待直到有可用的線程
     wait_for_threads
-    
+
     # 執行pull_images函數為背景任務
     pull_images "$dir" &
 done
