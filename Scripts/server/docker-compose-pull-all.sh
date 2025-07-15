@@ -41,7 +41,8 @@
 DIRECTORY="."
 THREADS=4
 LOGFILE="./docker_pull.log"
-RUNNING_ONLY=false
+RUNNING_ONLY=true
+GIT_PULL=false
 
 # 統計變數
 TOTAL_SERVICES=0
@@ -99,19 +100,19 @@ get_stat() {
 usage() {
     echo "${CYAN}Docker Compose 鏡像更新工具${NC}"
     echo ""
-    echo "Usage: $0 [-d directory] [-t threads] [-l logfile] [--running-only]"
+    echo "Usage: $0 [-d directory] [-t threads] [-l logfile] [--all]"
     echo ""
     echo "參數說明："
     echo "  -d, --directory    指定包含Docker Compose服務的主目錄 (預設為當前目錄)"
     echo "  -t, --threads      指定同時執行的線程數量 (預設為4，範圍1-20)"
     echo "  -l, --log          指定日誌檔案路徑 (預設為./docker_pull.log)"
-    echo "      --running-only 只更新有正在運行容器的服務"
+    echo "      --all          更新所有服務，而不僅僅是正在運行的服務"
     echo "  -h, --help         顯示此幫助訊息"
     echo ""
     echo "使用範例："
-    echo "  $0                                    # 基本用法"
+    echo "  $0                                    # 預設只更新運行中的服務"
     echo "  $0 -d /opt/services -t 8             # 指定目錄和線程數"
-    echo "  $0 --running-only                    # 只更新運行中的服務"
+    echo "  $0 --all                             # 更新所有服務"
     echo ""
     exit 1
 }
@@ -208,8 +209,8 @@ parse_args() {
         -h | --help)
             usage
             ;;
-        --running-only)
-            RUNNING_ONLY=true
+        --all)
+            RUNNING_ONLY=false
             ;;
         *)
             echo -e "${RED}錯誤：未知參數 $1${NC}"
@@ -288,7 +289,6 @@ pull_images() {
         running_containers=$($DOCKER_COMPOSE_CMD ps -q 2>/dev/null)
 
         if [ -n "$running_containers" ]; then
-            local container_count
             container_count=$(echo "$running_containers" | wc -l | tr -d ' ')
             log "${YELLOW}服務 $service_name 有 $container_count 個正在運行的容器，開始更新...${NC}"
 
@@ -429,9 +429,9 @@ echo -e "${BLUE}  - 線程數量：$THREADS${NC}"
 echo -e "${BLUE}  - 日誌文件：$LOGFILE${NC}"
 echo -e "${BLUE}  - Docker Compose 命令：$DOCKER_COMPOSE_CMD${NC}"
 if [ "$RUNNING_ONLY" = true ]; then
-    echo -e "${BLUE}  - 模式：僅更新運行中的服務${NC}"
+    echo -e "${BLUE}  - 模式：僅更新運行中的服務 (預設)${NC}"
 else
-    echo -e "${BLUE}  - 模式：更新所有服務${NC}"
+    echo -e "${BLUE}  - 模式：更新所有服務 (由 --all 觸發)${NC}"
 fi
 echo ""
 
