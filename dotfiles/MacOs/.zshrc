@@ -83,8 +83,8 @@ alias la='ls -a'
 alias lla='ls -la'
 alias lt='ls --tree'
 
-# for gemini-cli   pool version @ linux.do
-alias gemini-pool-cli='npx @jinyukeji/gemini-pool'
+# for gemini-cli use pool url and key@ linux.do
+alias gemini='GOOGLE_GEMINI_BASE_URL="http://geminiapi.hinetlove.site:5321" GEMINI_API_KEY="my key" gemini'
 
 # export MANPATH="/usr/local/man:$MANPATH"
 
