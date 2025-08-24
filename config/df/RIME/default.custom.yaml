@@ -1,0 +1,27 @@
+AApatch:
+  ascii_composer:
+    good_old_caps_lock: true
+    switch_key: {Caps_Lock: noop}
+  "menu/page_size": 6
+  schema_list:
+    - {schema: bopomofo_tw}
+  switcher:
+    hotkeys: ["Control+grave", "Control+Shift+grave"]
+  switches:
+    - {name: ascii_mode, reset: 1, states: ["中文", "西文"]}
+customization:
+  distribution_code_name: Weasel
+  distribution_version: 0.16.3
+  generator: "Rime::SwitcherSettings"
+  modified_time: "Fri Mar 28s22:41:14 2025"
+  rime_version: 1.11.2
+patch:
+  schema_list:
+    - {schema: bopomofo_tw}
+  "menu/page_size": 6
+  switcher:
+    hotkeys: ["Control+grave", "Control+Shift+grave"]
+  ascii_composer:
+    good_old_caps_lock: false
+    switch_key: {Caps_Lock: noop, Control_L: noop, Control_R: noop, Eisu_toggle: clear, Shift_L: clear, Shift_R: clear}
+  
