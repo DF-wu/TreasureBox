@@ -1,5 +1,5 @@
 [Unit]
-Description=NFS Mount for appdata
+Description=CIFS Mount for fastpool
 DefaultDependencies=no
 Requires=network-online.target
 After=network-online.target
@@ -8,12 +8,13 @@ Before=remote-fs.target
 StartLimitIntervalSec=0
 StartLimitBurst=5
 
-
 [Mount]
-What=truenas:/mnt/cachePool/appdata
-Where=/mnt/appdata
-Type=nfs
-Options=nfsvers=4,rw,noatime,rsize=32768,wsize=32768
+What=//truenas/fastpool
+Where=/mnt/fastpool
+T
+ype=cifs
+Options=multichannel,vers=3,rw,mfsymlinks,echo_interval=300,username=df,password=0,file_mode=0777,dir_mode=0777
 
 [Install]
 WantedBy=multi-user.target
+

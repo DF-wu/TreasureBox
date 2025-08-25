@@ -9,11 +9,10 @@ StartLimitIntervalSec=0
 StartLimitBurst=5
 
 [Mount]
-What=//truenas/fastpool
+What=truenas:/mnt/fastdrive/fastpool
 Where=/mnt/fastpool
-Type=cifs
-Options=multichannel,vers=3,rw,mfsymlinks,echo_interval=300,username=df,password=0,file_mode=0777,dir_mode=0777
+Type=nfs
+Options=nfsvers=4,rw,noatime,rsize=32768,wsize=32768
 
 [Install]
 WantedBy=multi-user.target
-
