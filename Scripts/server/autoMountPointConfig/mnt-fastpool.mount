@@ -1,5 +1,5 @@
 [Unit]
-Description=CIFS Mount for fastpool
+Description=NFS Mount for fastpool
 DefaultDependencies=no
 Requires=network-online.target
 After=network-online.target
