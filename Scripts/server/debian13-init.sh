@@ -46,7 +46,7 @@ echo -e "${YELLOW}[STEP 2/7]${NC} 更新系統並安裝核心套件..."
 apt update
 
 # 定義要安裝的套件列表
-CORE_PACKAGES="sudo curl wget git build-essential dkms neovim  zsh tmux htop iotop iftop bmon smartmontools lm-sensors rclone   tailscale speedtest-cli iperf3  lsd"
+CORE_PACKAGES="sudo curl wget git build-essential dkms neovim  zsh tmux htop iotop iftop bmon smartmontools lm-sensors rclone   speedtest-cli iperf3  lsd"
 
 echo -e "${BLUE}[INFO]${NC} 即將安裝以下核心套件："
 echo -e "${CORE_PACKAGES}"
