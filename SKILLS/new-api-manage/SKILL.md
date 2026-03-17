@@ -38,6 +38,12 @@ export NEW_API_USER_ID='1'                        # 登入者 id
 export NEW_API_ACCESS_TOKEN='<access_token>'      # /api/user/token 產生的 access_token
 ```
 
+若你要呼叫 `TokenAuthReadOnly` 類端點（例如：查某個 token key 的用量 / log），需要準備 **token key（sk-...）**：
+
+```bash
+export NEW_API_TOKEN_KEY='sk-<token_key>'
+```
+
 如需自簽 TLS：
 
 ```bash
@@ -101,6 +107,7 @@ bash skills/new-api-manage/scripts/newapi call POST /api/channel/ --auth token -
 
 ```bash
 # 健康檢查（不需要 auth 就能看基本狀態；若有 token 也會順便驗證 /api/user/self）
+bash skills/new-api-manage/scripts/newapi doctor
 
 # 渠道
 bash skills/new-api-manage/scripts/newapi channel list --p 1 --page-size 20
@@ -118,6 +125,7 @@ bash skills/new-api-manage/scripts/newapi routes gen --format md --out /tmp/rout
 
 - `token`：使用 `NEW_API_ACCESS_TOKEN` + `New-Api-User`
 - `session`：使用 `NEW_API_COOKIE_JAR`（cookie jar）+ `New-Api-User`
+- `sk`：使用 `NEW_API_TOKEN_KEY`（`sk-...` token key；用於 `TokenAuthReadOnly` 類端點，例如 `/api/usage/token/`、`/api/log/token`）
 - `auto`（預設）：有 token 就用 token；沒有就嘗試 session
 - `none`：強制不帶 Authorization（適合打 public endpoint 做連線測試）
 
@@ -502,6 +510,13 @@ Token 用量（TokenAuthReadOnly；注意這裡的 Authorization 是 `sk-...` to
 
 - `GET /api/usage/token/`
 
+用 `scripts/newapi`（建議）：
+
+```bash
+export NEW_API_TOKEN_KEY='sk-...'
+bash skills/new-api-manage/scripts/newapi usage token
+```
+
 ### 5.7 兌換碼（Redemption）（AdminAuth）
 
 - `GET    /api/redemption/`
@@ -528,6 +543,13 @@ Token 用量（TokenAuthReadOnly；注意這裡的 Authorization 是 `sk-...` to
 Token 查詢自身 log：
 
 - `GET /api/log/token`（TokenAuthReadOnly）
+
+用 `scripts/newapi`（建議）：
+
+```bash
+export NEW_API_TOKEN_KEY='sk-...'
+bash skills/new-api-manage/scripts/newapi log token
+```
 
 Channel affinity cache usage（Admin）：
 
