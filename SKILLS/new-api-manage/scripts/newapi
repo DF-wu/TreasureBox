@@ -3,7 +3,11 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-newapi - helper for QuantumNous/new-api management API (/api/*)
+newapi - production CLI helper for QuantumNous/new-api management API (/api/*)
+
+Global options (must appear before <command>)
+  --config <path>       # same as NEW_API_CONFIG
+  --insecure            # same as NEW_API_INSECURE=true (curl -k)
 
 Required env
   NEW_API_BASE_URL    e.g. http://127.0.0.1:3000
@@ -20,11 +24,69 @@ Auth (choose one)
 Optional env
   NEW_API_INSECURE=true   # curl -k
   NEW_API_CONFIG=/path/to/config.json
+  NEW_API_CODE_DIR=/path/to/new-api-repo   # for route generation
 
 Commands
-  call <METHOD> <PATH> [--auth token|session|auto] [--json <file>] [--data <json>] [--output pretty|raw] [--header 'K: V']
+  doctor
+  call <METHOD> <PATH> [--auth token|session|auto|none] [--json <file>] [--data <json>] [--output pretty|raw] [--header 'K: V']
   login --username <u> --password <p> [--turnstile <token>] [--cookie-jar <path>]
   login2fa --code <totp_or_backup_code> [--cookie-jar <path>]
+
+  routes gen [--code-dir <dir>] [--router-file <path>] [--format md|json] [--out <file>]
+
+  channel list   [--p N] [--page-size N] [--status enabled|disabled|all] [--type N] [--id-sort] [--tag-mode]
+  channel search --keyword <kw> [--group <g>] [--model <m>] [--p N] [--page-size N] [--status enabled|disabled|all] [--type N] [--id-sort] [--tag-mode]
+  channel get    --id <id>
+  channel create --json <file>
+  channel update --json <file>
+  channel delete --id <id> --yes
+  channel batch-delete --ids <1,2,3> --yes
+  channel batch-tag    --ids <1,2,3> --tag <tag> --yes
+  channel copy   --id <id> [--suffix <s>] [--reset-balance true|false]
+  channel upstream-updates detect|apply|detect-all|apply-all [...]
+
+  token list [--p N] [--page-size N]
+  token search [--keyword <kw>] [--token <partial>] [--p N] [--page-size N]
+  token get --id <id>
+  token create --json <file>
+  token update --json <file>
+  token delete --id <id> --yes
+  token key --id <id> (--out <file> | --stdout)
+
+  user self
+  user list [--p N] [--page-size N]
+  user search [--keyword <kw>] [--group <g>] [--p N] [--page-size N]
+  user get --id <id>
+  user create --json <file>
+  user update --json <file>
+  user manage --id <id> --action disable|enable|delete|promote|demote [--yes]
+  user delete --id <id> --yes
+  user oauth-bindings --id <id>
+  user oauth-unbind --id <id> --provider-id <pid> --yes
+  user binding-clear --id <id> --binding-type <type> --yes
+
+  option get
+  option set --key <k> --value <v>
+  option reset-model-ratio --yes
+  option affinity-cache stats
+  option affinity-cache clear (--all | --rule-name <name>) --yes
+
+  models list [--p N] [--page-size N]
+  models search [--keyword <kw>] [--vendor <v>] [--p N] [--page-size N]
+  models get --id <id>
+  models create --json <file>
+  models update --json <file>
+  models delete --id <id> --yes
+  models missing
+  models sync preview [--locale <loc>]
+  models sync run --json <file>
+
+  vendors list [--p N] [--page-size N]
+  vendors search [--keyword <kw>] [--p N] [--page-size N]
+  vendors get --id <id>
+  vendors create --json <file>
+  vendors update --json <file>
+  vendors delete --id <id> --yes
 
 Examples
   bash skills/new-api-manage/scripts/newapi call GET /api/status
@@ -41,6 +103,10 @@ Examples
 
   # If 2FA is enabled, complete login in the same cookie jar
   bash skills/new-api-manage/scripts/newapi login2fa --code 123456 | jq .
+
+  # Generate routes index from local new-api repo
+  export NEW_API_CODE_DIR=/data/workspace/new-api-latest
+  bash skills/new-api-manage/scripts/newapi routes gen --format md --out /tmp/routes.md
 
 EOF
 }
@@ -78,6 +144,35 @@ load_config_if_any() {
     err "jq is required to load NEW_API_CONFIG"
     return 1
   fi
+}
+
+require_jq() {
+  if ! command -v jq >/dev/null 2>&1; then
+    err "jq is required for this command"
+    return 1
+  fi
+}
+
+urlencode() {
+  require_jq
+  jq -rn --arg v "$1" '$v|@uri'
+}
+
+confirm_or_die() {
+  local yes="$1"
+  local what="$2"
+  if [[ "$yes" != "true" && "$yes" != "1" ]]; then
+    err "refusing to proceed without --yes: $what"
+    return 1
+  fi
+}
+
+write_secret() {
+  local out="$1"
+  local value="$2"
+  umask 077
+  mkdir -p "$(dirname "$out")"
+  printf '%s' "$value" >"$out"
 }
 
 curl_base_args() {
@@ -163,6 +258,10 @@ call_cmd() {
     session)
       use_session=true
       ;;
+    none)
+      # force no auth
+      :
+      ;;
     auto)
       if [[ -n "${NEW_API_ACCESS_TOKEN:-}" ]]; then
         use_token=true
@@ -174,7 +273,7 @@ call_cmd() {
       fi
       ;;
     *)
-      err "invalid --auth: $auth (expected token|session|auto)"
+      err "invalid --auth: $auth (expected token|session|auto|none)"
       return 1
       ;;
   esac
@@ -249,6 +348,1154 @@ call_cmd() {
   else
     curl "${curl_args[@]}" "$url"
   fi
+}
+
+doctor_cmd() {
+  require_base_url
+  local base
+  base="$(trim_trailing_slash "$NEW_API_BASE_URL")"
+  echo "[doctor] base_url=$base" >&2
+  echo "[doctor] user_id=${NEW_API_USER_ID:-<unset>}" >&2
+  if [[ -n "${NEW_API_ACCESS_TOKEN:-}" ]]; then
+    echo "[doctor] auth=access_token (Authorization: Bearer …)" >&2
+  elif [[ -n "${NEW_API_COOKIE_JAR:-}" ]]; then
+    echo "[doctor] auth=session_cookie (cookie jar: ${NEW_API_COOKIE_JAR})" >&2
+  else
+    echo "[doctor] auth=none" >&2
+  fi
+
+  echo "[doctor] GET /api/status" >&2
+  call_cmd GET /api/status --auth none
+
+  if [[ -n "${NEW_API_ACCESS_TOKEN:-}" && -n "${NEW_API_USER_ID:-}" ]]; then
+    echo "[doctor] GET /api/user/self (token)" >&2
+    call_cmd GET /api/user/self --auth token
+  fi
+}
+
+routes_cmd() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    gen|generate|show|list|"" )
+      :
+      ;;
+    *)
+      err "routes subcommand: $sub (expected gen)"
+      return 1
+      ;;
+  esac
+
+  local code_dir="${NEW_API_CODE_DIR:-}"
+  local router_file=""
+  local format="md"
+  local out=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --code-dir)
+        code_dir="$2"; shift 2 ;;
+      --router-file)
+        router_file="$2"; shift 2 ;;
+      --format)
+        format="$2"; shift 2 ;;
+      --out)
+        out="$2"; shift 2 ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        err "unknown arg: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local gen="$script_dir/generate_routes.py"
+
+  local -a py_args
+  py_args=("$gen" "--format" "$format")
+  if [[ -n "$code_dir" ]]; then
+    py_args+=("--code-dir" "$code_dir")
+  fi
+  if [[ -n "$router_file" ]]; then
+    py_args+=("--router-file" "$router_file")
+  fi
+  if [[ -n "$out" ]]; then
+    py_args+=("--out" "$out")
+  fi
+
+  python3 "${py_args[@]}"
+}
+
+channel_list_cmd() {
+  local p=1
+  local page_size=20
+  local status="all"
+  local type=""
+  local id_sort="false"
+  local tag_mode="false"
+  local auth="token"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --status) status="$2"; shift 2 ;;
+      --type) type="$2"; shift 2 ;;
+      --id-sort) id_sort="true"; shift ;;
+      --tag-mode) tag_mode="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        err "unknown arg: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  local qs="p=$p&page_size=$page_size&id_sort=$id_sort&tag_mode=$tag_mode"
+  if [[ "$status" != "all" ]]; then
+    qs="$qs&status=$(urlencode "$status")"
+  fi
+  if [[ -n "$type" ]]; then
+    qs="$qs&type=$(urlencode "$type")"
+  fi
+
+  call_cmd GET "/api/channel/?$qs" --auth "$auth"
+}
+
+channel_search_cmd() {
+  local keyword=""
+  local group=""
+  local model_kw=""
+  local p=1
+  local page_size=20
+  local status="all"
+  local type=""
+  local id_sort="false"
+  local tag_mode="false"
+  local auth="token"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --keyword) keyword="$2"; shift 2 ;;
+      --group) group="$2"; shift 2 ;;
+      --model) model_kw="$2"; shift 2 ;;
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --status) status="$2"; shift 2 ;;
+      --type) type="$2"; shift 2 ;;
+      --id-sort) id_sort="true"; shift ;;
+      --tag-mode) tag_mode="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        err "unknown arg: $1"
+        return 1
+        ;;
+    esac
+  done
+  if [[ -z "$keyword" ]]; then
+    err "channel search requires --keyword"
+    return 1
+  fi
+
+  local qs="keyword=$(urlencode "$keyword")&p=$p&page_size=$page_size&id_sort=$id_sort&tag_mode=$tag_mode"
+  if [[ -n "$group" ]]; then
+    qs="$qs&group=$(urlencode "$group")"
+  fi
+  if [[ -n "$model_kw" ]]; then
+    qs="$qs&model=$(urlencode "$model_kw")"
+  fi
+  if [[ "$status" != "all" ]]; then
+    qs="$qs&status=$(urlencode "$status")"
+  fi
+  if [[ -n "$type" ]]; then
+    qs="$qs&type=$(urlencode "$type")"
+  fi
+
+  call_cmd GET "/api/channel/search?$qs" --auth "$auth"
+}
+
+channel_get_cmd() {
+  local id=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then
+    err "channel get requires --id"
+    return 1
+  fi
+  call_cmd GET "/api/channel/$id" --auth "$auth"
+}
+
+channel_create_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then
+    err "channel create requires --json <file>"
+    return 1
+  fi
+  call_cmd POST "/api/channel/" --auth "$auth" --json "$json_file"
+}
+
+channel_update_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then
+    err "channel update requires --json <file>"
+    return 1
+  fi
+  call_cmd PUT "/api/channel/" --auth "$auth" --json "$json_file"
+}
+
+channel_delete_cmd() {
+  local id=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then
+    err "channel delete requires --id"
+    return 1
+  fi
+  confirm_or_die "$yes" "DELETE /api/channel/$id"
+  call_cmd DELETE "/api/channel/$id" --auth "$auth"
+}
+
+channel_batch_delete_cmd() {
+  require_jq
+  local ids=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --ids) ids="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$ids" ]]; then
+    err "channel batch-delete requires --ids '1,2,3'"
+    return 1
+  fi
+  confirm_or_die "$yes" "POST /api/channel/batch ids=$ids"
+  local body
+  body="$(jq -nc --arg ids "$ids" '{ids: ($ids|split(",")|map(tonumber))}')"
+  call_cmd POST "/api/channel/batch" --auth "$auth" --data "$body"
+}
+
+channel_batch_tag_cmd() {
+  require_jq
+  local ids=""
+  local tag=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --ids) ids="$2"; shift 2 ;;
+      --tag) tag="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$ids" || -z "$tag" ]]; then
+    err "channel batch-tag requires --ids and --tag"
+    return 1
+  fi
+  confirm_or_die "$yes" "POST /api/channel/batch/tag ids=$ids tag=$tag"
+  local body
+  body="$(jq -nc --arg ids "$ids" --arg tag "$tag" '{ids: ($ids|split(",")|map(tonumber)), tag: $tag}')"
+  call_cmd POST "/api/channel/batch/tag" --auth "$auth" --data "$body"
+}
+
+channel_copy_cmd() {
+  local id=""
+  local suffix=""
+  local reset_balance=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --suffix) suffix="$2"; shift 2 ;;
+      --reset-balance) reset_balance="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then
+    err "channel copy requires --id"
+    return 1
+  fi
+  local qs=""
+  if [[ -n "$suffix" ]]; then
+    qs="suffix=$(urlencode "$suffix")"
+  fi
+  if [[ -n "$reset_balance" ]]; then
+    if [[ -n "$qs" ]]; then qs="$qs&"; fi
+    qs="${qs}reset_balance=$(urlencode "$reset_balance")"
+  fi
+  local path="/api/channel/copy/$id"
+  if [[ -n "$qs" ]]; then
+    path="$path?$qs"
+  fi
+  call_cmd POST "$path" --auth "$auth"
+}
+
+channel_upstream_updates_cmd() {
+  require_jq
+  local sub="${1:-}"
+  shift || true
+  local auth="token"
+
+  case "$sub" in
+    detect)
+      local id=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --id) id="$2"; shift 2 ;;
+          --auth) auth="$2"; shift 2 ;;
+          *) err "unknown arg: $1"; return 1 ;;
+        esac
+      done
+      if [[ -z "$id" ]]; then err "detect requires --id"; return 1; fi
+      call_cmd POST "/api/channel/upstream_updates/detect" --auth "$auth" --data "$(jq -nc --arg id "$id" '{id: ($id|tonumber)}')"
+      ;;
+    apply)
+      local id=""
+      local add=""
+      local remove=""
+      local ignore=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --id) id="$2"; shift 2 ;;
+          --add) add="$2"; shift 2 ;;
+          --remove) remove="$2"; shift 2 ;;
+          --ignore) ignore="$2"; shift 2 ;;
+          --auth) auth="$2"; shift 2 ;;
+          *) err "unknown arg: $1"; return 1 ;;
+        esac
+      done
+      if [[ -z "$id" ]]; then err "apply requires --id"; return 1; fi
+      local body
+      body="$(jq -nc --arg id "$id" --arg add "$add" --arg remove "$remove" --arg ignore "$ignore" '
+        def to_arr($s): ($s|split(",")|map(gsub("^\\s+|\\s+$";""))|map(select(length>0)));
+        {id: ($id|tonumber), add_models: to_arr($add), remove_models: to_arr($remove), ignore_models: to_arr($ignore)}
+      ')"
+      call_cmd POST "/api/channel/upstream_updates/apply" --auth "$auth" --data "$body"
+      ;;
+    detect-all)
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --auth) auth="$2"; shift 2 ;;
+          *) err "unknown arg: $1"; return 1 ;;
+        esac
+      done
+      call_cmd POST "/api/channel/upstream_updates/detect_all" --auth "$auth"
+      ;;
+    apply-all)
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --auth) auth="$2"; shift 2 ;;
+          *) err "unknown arg: $1"; return 1 ;;
+        esac
+      done
+      call_cmd POST "/api/channel/upstream_updates/apply_all" --auth "$auth"
+      ;;
+    *)
+      err "upstream-updates expects: detect|apply|detect-all|apply-all"
+      return 1
+      ;;
+  esac
+}
+
+channel_cmd() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    list) channel_list_cmd "$@" ;;
+    search) channel_search_cmd "$@" ;;
+    get) channel_get_cmd "$@" ;;
+    create) channel_create_cmd "$@" ;;
+    update) channel_update_cmd "$@" ;;
+    delete) channel_delete_cmd "$@" ;;
+    batch-delete) channel_batch_delete_cmd "$@" ;;
+    batch-tag) channel_batch_tag_cmd "$@" ;;
+    copy) channel_copy_cmd "$@" ;;
+    upstream-updates) channel_upstream_updates_cmd "$@" ;;
+    *)
+      err "unknown channel subcommand: $sub"
+      return 1
+      ;;
+  esac
+}
+
+token_list_cmd() {
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/token/?p=$p&page_size=$page_size" --auth "$auth"
+}
+
+token_search_cmd() {
+  local keyword=""
+  local token_part=""
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --keyword) keyword="$2"; shift 2 ;;
+      --token) token_part="$2"; shift 2 ;;
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  local qs="p=$p&page_size=$page_size"
+  if [[ -n "$keyword" ]]; then qs="$qs&keyword=$(urlencode "$keyword")"; fi
+  if [[ -n "$token_part" ]]; then qs="$qs&token=$(urlencode "$token_part")"; fi
+  call_cmd GET "/api/token/search?$qs" --auth "$auth"
+}
+
+token_get_cmd() {
+  local id=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "token get requires --id"; return 1; fi
+  call_cmd GET "/api/token/$id" --auth "$auth"
+}
+
+token_create_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "token create requires --json"; return 1; fi
+  call_cmd POST "/api/token/" --auth "$auth" --json "$json_file"
+}
+
+token_update_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "token update requires --json"; return 1; fi
+  call_cmd PUT "/api/token/" --auth "$auth" --json "$json_file"
+}
+
+token_delete_cmd() {
+  local id=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "token delete requires --id"; return 1; fi
+  confirm_or_die "$yes" "DELETE /api/token/$id"
+  call_cmd DELETE "/api/token/$id" --auth "$auth"
+}
+
+token_key_cmd() {
+  require_jq
+  local id=""
+  local out=""
+  local stdout="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      --stdout) stdout="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "token key requires --id"; return 1; fi
+  if [[ -z "$out" && "$stdout" != "true" ]]; then
+    err "token key is sensitive; use --out <file> (recommended) or --stdout"
+    return 1
+  fi
+
+  local res
+  res="$(call_cmd POST "/api/token/$id/key" --auth "$auth" --output raw)"
+  local key
+  key="$(echo "$res" | jq -r '.data.key // empty')"
+  if [[ -z "$key" ]]; then
+    err "failed to extract key from response"
+    echo "$res" | (command -v jq >/dev/null 2>&1 && jq . || cat)
+    return 1
+  fi
+
+  if [[ -n "$out" ]]; then
+    write_secret "$out" "$key"
+    err "wrote token key to: $out"
+  fi
+  if [[ "$stdout" == "true" ]]; then
+    echo "$key"
+  fi
+}
+
+token_cmd() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    list) token_list_cmd "$@" ;;
+    search) token_search_cmd "$@" ;;
+    get) token_get_cmd "$@" ;;
+    create) token_create_cmd "$@" ;;
+    update) token_update_cmd "$@" ;;
+    delete) token_delete_cmd "$@" ;;
+    key) token_key_cmd "$@" ;;
+    *)
+      err "unknown token subcommand: $sub"
+      return 1
+      ;;
+  esac
+}
+
+user_self_cmd() {
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/user/self" --auth "$auth"
+}
+
+user_list_cmd() {
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/user/?p=$p&page_size=$page_size" --auth "$auth"
+}
+
+user_search_cmd() {
+  local keyword=""
+  local group=""
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --keyword) keyword="$2"; shift 2 ;;
+      --group) group="$2"; shift 2 ;;
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  local qs="p=$p&page_size=$page_size"
+  if [[ -n "$keyword" ]]; then qs="$qs&keyword=$(urlencode "$keyword")"; fi
+  if [[ -n "$group" ]]; then qs="$qs&group=$(urlencode "$group")"; fi
+  call_cmd GET "/api/user/search?$qs" --auth "$auth"
+}
+
+user_get_cmd() {
+  local id=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "user get requires --id"; return 1; fi
+  call_cmd GET "/api/user/$id" --auth "$auth"
+}
+
+user_create_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "user create requires --json"; return 1; fi
+  call_cmd POST "/api/user/" --auth "$auth" --json "$json_file"
+}
+
+user_update_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "user update requires --json"; return 1; fi
+  call_cmd PUT "/api/user/" --auth "$auth" --json "$json_file"
+}
+
+user_manage_cmd() {
+  require_jq
+  local id=""
+  local action=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --action) action="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" || -z "$action" ]]; then err "user manage requires --id and --action"; return 1; fi
+  if [[ "$action" == "delete" ]]; then
+    confirm_or_die "$yes" "POST /api/user/manage action=delete id=$id"
+  fi
+  local body
+  body="$(jq -nc --arg id "$id" --arg action "$action" '{id: ($id|tonumber), action: $action}')"
+  call_cmd POST "/api/user/manage" --auth "$auth" --data "$body"
+}
+
+user_delete_cmd() {
+  local id=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "user delete requires --id"; return 1; fi
+  confirm_or_die "$yes" "DELETE /api/user/$id"
+  call_cmd DELETE "/api/user/$id" --auth "$auth"
+}
+
+user_oauth_bindings_cmd() {
+  local id=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "oauth-bindings requires --id"; return 1; fi
+  call_cmd GET "/api/user/$id/oauth/bindings" --auth "$auth"
+}
+
+user_oauth_unbind_cmd() {
+  local id=""
+  local provider_id=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --provider-id) provider_id="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" || -z "$provider_id" ]]; then err "oauth-unbind requires --id and --provider-id"; return 1; fi
+  confirm_or_die "$yes" "DELETE /api/user/$id/oauth/bindings/$provider_id"
+  call_cmd DELETE "/api/user/$id/oauth/bindings/$provider_id" --auth "$auth"
+}
+
+user_binding_clear_cmd() {
+  local id=""
+  local binding_type=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --binding-type) binding_type="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" || -z "$binding_type" ]]; then err "binding-clear requires --id and --binding-type"; return 1; fi
+  confirm_or_die "$yes" "DELETE /api/user/$id/bindings/$binding_type"
+  call_cmd DELETE "/api/user/$id/bindings/$binding_type" --auth "$auth"
+}
+
+user_cmd() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    self) user_self_cmd "$@" ;;
+    list) user_list_cmd "$@" ;;
+    search) user_search_cmd "$@" ;;
+    get) user_get_cmd "$@" ;;
+    create) user_create_cmd "$@" ;;
+    update) user_update_cmd "$@" ;;
+    manage) user_manage_cmd "$@" ;;
+    delete) user_delete_cmd "$@" ;;
+    oauth-bindings) user_oauth_bindings_cmd "$@" ;;
+    oauth-unbind) user_oauth_unbind_cmd "$@" ;;
+    binding-clear) user_binding_clear_cmd "$@" ;;
+    *) err "unknown user subcommand: $sub"; return 1 ;;
+  esac
+}
+
+option_get_cmd() {
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/option/" --auth "$auth"
+}
+
+option_set_cmd() {
+  require_jq
+  local key=""
+  local value=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --key) key="$2"; shift 2 ;;
+      --value) value="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$key" ]]; then err "option set requires --key"; return 1; fi
+
+  local body
+  body="$(jq -nc --arg k "$key" --arg v "$value" '
+    def parse($s):
+      if ($s|ascii_downcase) == "true" then true
+      elif ($s|ascii_downcase) == "false" then false
+      elif ($s|test("^-?[0-9]+(\\.[0-9]+)?$")) then ($s|tonumber)
+      else $s end;
+    {key: $k, value: parse($v)}
+  ')"
+  call_cmd PUT "/api/option/" --auth "$auth" --data "$body"
+}
+
+option_reset_model_ratio_cmd() {
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  confirm_or_die "$yes" "POST /api/option/rest_model_ratio"
+  call_cmd POST "/api/option/rest_model_ratio" --auth "$auth"
+}
+
+option_affinity_cache_stats_cmd() {
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/option/channel_affinity_cache" --auth "$auth"
+}
+
+option_affinity_cache_clear_cmd() {
+  local all="false"
+  local rule_name=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all) all="true"; shift ;;
+      --rule-name) rule_name="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ "$all" != "true" && -z "$rule_name" ]]; then
+    err "affinity-cache clear requires --all or --rule-name"
+    return 1
+  fi
+  confirm_or_die "$yes" "DELETE /api/option/channel_affinity_cache"
+
+  local path="/api/option/channel_affinity_cache"
+  if [[ "$all" == "true" ]]; then
+    path="$path?all=true"
+  else
+    path="$path?rule_name=$(urlencode "$rule_name")"
+  fi
+  call_cmd DELETE "$path" --auth "$auth"
+}
+
+option_cmd() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    get) option_get_cmd "$@" ;;
+    set) option_set_cmd "$@" ;;
+    reset-model-ratio) option_reset_model_ratio_cmd "$@" ;;
+    affinity-cache)
+      local sub2="${1:-}"
+      shift || true
+      case "$sub2" in
+        stats) option_affinity_cache_stats_cmd "$@" ;;
+        clear) option_affinity_cache_clear_cmd "$@" ;;
+        *) err "option affinity-cache expects stats|clear"; return 1 ;;
+      esac
+      ;;
+    *) err "unknown option subcommand: $sub"; return 1 ;;
+  esac
+}
+
+models_list_cmd() {
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/models/?p=$p&page_size=$page_size" --auth "$auth"
+}
+
+models_search_cmd() {
+  local keyword=""
+  local vendor=""
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --keyword) keyword="$2"; shift 2 ;;
+      --vendor) vendor="$2"; shift 2 ;;
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  local qs="p=$p&page_size=$page_size"
+  if [[ -n "$keyword" ]]; then qs="$qs&keyword=$(urlencode "$keyword")"; fi
+  if [[ -n "$vendor" ]]; then qs="$qs&vendor=$(urlencode "$vendor")"; fi
+  call_cmd GET "/api/models/search?$qs" --auth "$auth"
+}
+
+models_get_cmd() {
+  local id=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "models get requires --id"; return 1; fi
+  call_cmd GET "/api/models/$id" --auth "$auth"
+}
+
+models_create_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "models create requires --json"; return 1; fi
+  call_cmd POST "/api/models/" --auth "$auth" --json "$json_file"
+}
+
+models_update_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "models update requires --json"; return 1; fi
+  call_cmd PUT "/api/models/" --auth "$auth" --json "$json_file"
+}
+
+models_delete_cmd() {
+  local id=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "models delete requires --id"; return 1; fi
+  confirm_or_die "$yes" "DELETE /api/models/$id"
+  call_cmd DELETE "/api/models/$id" --auth "$auth"
+}
+
+models_missing_cmd() {
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/models/missing" --auth "$auth"
+}
+
+models_sync_preview_cmd() {
+  local locale=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --locale) locale="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  local path="/api/models/sync_upstream/preview"
+  if [[ -n "$locale" ]]; then
+    path="$path?locale=$(urlencode "$locale")"
+  fi
+  call_cmd GET "$path" --auth "$auth"
+}
+
+models_sync_run_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "models sync run requires --json"; return 1; fi
+  call_cmd POST "/api/models/sync_upstream" --auth "$auth" --json "$json_file"
+}
+
+models_cmd() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    list) models_list_cmd "$@" ;;
+    search) models_search_cmd "$@" ;;
+    get) models_get_cmd "$@" ;;
+    create) models_create_cmd "$@" ;;
+    update) models_update_cmd "$@" ;;
+    delete) models_delete_cmd "$@" ;;
+    missing) models_missing_cmd "$@" ;;
+    sync)
+      local sub2="${1:-}"
+      shift || true
+      case "$sub2" in
+        preview) models_sync_preview_cmd "$@" ;;
+        run) models_sync_run_cmd "$@" ;;
+        *) err "models sync expects preview|run"; return 1 ;;
+      esac
+      ;;
+    *) err "unknown models subcommand: $sub"; return 1 ;;
+  esac
+}
+
+vendors_list_cmd() {
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  call_cmd GET "/api/vendors/?p=$p&page_size=$page_size" --auth "$auth"
+}
+
+vendors_search_cmd() {
+  local keyword=""
+  local p=1
+  local page_size=20
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --keyword) keyword="$2"; shift 2 ;;
+      --p) p="$2"; shift 2 ;;
+      --page-size) page_size="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  local qs="p=$p&page_size=$page_size"
+  if [[ -n "$keyword" ]]; then qs="$qs&keyword=$(urlencode "$keyword")"; fi
+  call_cmd GET "/api/vendors/search?$qs" --auth "$auth"
+}
+
+vendors_get_cmd() {
+  local id=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "vendors get requires --id"; return 1; fi
+  call_cmd GET "/api/vendors/$id" --auth "$auth"
+}
+
+vendors_create_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "vendors create requires --json"; return 1; fi
+  call_cmd POST "/api/vendors/" --auth "$auth" --json "$json_file"
+}
+
+vendors_update_cmd() {
+  local json_file=""
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_file="$2"; shift 2 ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$json_file" ]]; then err "vendors update requires --json"; return 1; fi
+  call_cmd PUT "/api/vendors/" --auth "$auth" --json "$json_file"
+}
+
+vendors_delete_cmd() {
+  local id=""
+  local yes="false"
+  local auth="token"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --yes) yes="true"; shift ;;
+      --auth) auth="$2"; shift 2 ;;
+      *) err "unknown arg: $1"; return 1 ;;
+    esac
+  done
+  if [[ -z "$id" ]]; then err "vendors delete requires --id"; return 1; fi
+  confirm_or_die "$yes" "DELETE /api/vendors/$id"
+  call_cmd DELETE "/api/vendors/$id" --auth "$auth"
+}
+
+vendors_cmd() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    list) vendors_list_cmd "$@" ;;
+    search) vendors_search_cmd "$@" ;;
+    get) vendors_get_cmd "$@" ;;
+    create) vendors_create_cmd "$@" ;;
+    update) vendors_update_cmd "$@" ;;
+    delete) vendors_delete_cmd "$@" ;;
+    *) err "unknown vendors subcommand: $sub"; return 1 ;;
+  esac
 }
 
 login_cmd() {
@@ -349,13 +1596,60 @@ login2fa_cmd() {
 }
 
 main() {
+  # Global options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --config)
+        NEW_API_CONFIG="$2"; shift 2 ;;
+      --insecure)
+        NEW_API_INSECURE=true; shift ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
   load_config_if_any || true
 
   local cmd="${1:-}"
   case "$cmd" in
+    doctor)
+      shift
+      doctor_cmd "$@"
+      ;;
     call)
       shift
       call_cmd "$@"
+      ;;
+    routes)
+      shift
+      routes_cmd "$@"
+      ;;
+    channel)
+      shift
+      channel_cmd "$@"
+      ;;
+    token)
+      shift
+      token_cmd "$@"
+      ;;
+    user)
+      shift
+      user_cmd "$@"
+      ;;
+    option)
+      shift
+      option_cmd "$@"
+      ;;
+    models)
+      shift
+      models_cmd "$@"
+      ;;
+    vendors)
+      shift
+      vendors_cmd "$@"
       ;;
     login)
       shift

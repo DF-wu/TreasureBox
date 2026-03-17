@@ -1,7 +1,7 @@
 ---
 name: new-api-manage
 description: 操作 QuantumNous/new-api 的管理介面（/api/*）：使用者/渠道/令牌/模型/供應商/系統設定/訂閱/部署/效能/倍率同步 等完整管理流程。
-metadata: {"clawdbot":{"requires":{"bins":["curl","jq"]}}}
+metadata: {"clawdbot":{"requires":{"bins":["curl","jq","python3","git"]}}}
 ---
 
 # new-api-manage
@@ -11,6 +11,8 @@ metadata: {"clawdbot":{"requires":{"bins":["curl","jq"]}}}
 本 skill 內容以 **upstream `QuantumNous/new-api` 最新 `main`** 為準（本環境對照碼：`/data/workspace/new-api-latest`，commit `8ed2ea6e`，2026-03-17）。
 
 若你實際部署的 new-api 版本不同，請以 `GET /api/status` 的 `version` 為準，再對照你當前 checkout 的 `router/api-router.go`；因為 `/api/*` 端點會隨版本增減。
+
+另外，本 skill 內含一份由程式自動產生的路由索引：`ROUTES.generated.md`（由 `scripts/generate_routes.py` 解析 `router/api-router.go` 產生）。當 upstream 更新時，你可以用同一支腳本重新生成，避免人工維護漏掉端點。
 
 ---
 
@@ -87,7 +89,7 @@ export NEW_API_CODE_DIR='/data/workspace/new-api-latest'
 
 路徑：`/data/skills/new-api-manage/scripts/newapi`
 
-最常用的呼叫方式：
+最常用的呼叫方式（通用 `call`）：
 
 ```bash
 bash skills/new-api-manage/scripts/newapi call GET /api/status
@@ -95,11 +97,39 @@ bash skills/new-api-manage/scripts/newapi call GET /api/channel/  --auth token
 bash skills/new-api-manage/scripts/newapi call POST /api/channel/ --auth token --json skills/new-api-manage/scripts/examples/channel.create.single.json
 ```
 
+另外 `scripts/newapi` 已提供多個「高階子命令」，用起來更像 production CLI（避免每次都手組 path/query/body）：
+
+```bash
+# 健康檢查（不需要 auth 就能看基本狀態；若有 token 也會順便驗證 /api/user/self）
+
+# 渠道
+bash skills/new-api-manage/scripts/newapi channel list --p 1 --page-size 20
+bash skills/new-api-manage/scripts/newapi channel search --keyword openai
+
+# Token
+bash skills/new-api-manage/scripts/newapi token list --p 1 --page-size 20
+
+# 產生路由索引（從 api-router.go 自動生成）
+export NEW_API_CODE_DIR='/data/workspace/new-api-latest'
+bash skills/new-api-manage/scripts/newapi routes gen --format md --out /tmp/routes.md
+```
+
 `--auth` 可用值：
 
 - `token`：使用 `NEW_API_ACCESS_TOKEN` + `New-Api-User`
 - `session`：使用 `NEW_API_COOKIE_JAR`（cookie jar）+ `New-Api-User`
 - `auto`（預設）：有 token 就用 token；沒有就嘗試 session
+- `none`：強制不帶 Authorization（適合打 public endpoint 做連線測試）
+
+全域參數（放在 command 前面）：
+
+```bash
+# 指定 config 檔
+bash skills/new-api-manage/scripts/newapi --config ./newapi.json doctor
+
+# self-signed TLS
+bash skills/new-api-manage/scripts/newapi --insecure call GET https://example/api/status --auth none
+```
 
 ---
 
@@ -239,6 +269,27 @@ rg -n "type Channel struct" "$NEW_API_CODE_DIR/model/channel.go" -S
 ```bash
 jq -r '.paths | keys[]' "$NEW_API_CODE_DIR/docs/openapi/api.json" | sort
 ```
+
+---
+
+## 4.7 自動產生「完整路由表」（建議作為唯一真相來源）
+
+如果你想要**完整列出當前版本所有 `/api/*` 路由**（含 method/path/auth/handler），請用本 skill 內建的產生器直接解析 `router/api-router.go`。
+
+生成 Markdown：
+
+```bash
+export NEW_API_CODE_DIR='/data/workspace/new-api-latest'
+python3 skills/new-api-manage/scripts/generate_routes.py --format md --out skills/new-api-manage/ROUTES.generated.md
+```
+
+生成 JSON（方便做 diff 或丟給其他工具處理）：
+
+```bash
+python3 skills/new-api-manage/scripts/generate_routes.py --format json --out /tmp/new-api.routes.json
+```
+
+> `ROUTES.generated.md` 是「機器生成」檔案，適合當索引；而本 `SKILL.md` 的端點章節則是「人工整理」的操作導覽，兩者各司其職。
 
 ---
 
@@ -626,22 +677,19 @@ Channel affinity cache：
 模式一：single
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/channel/ --auth token \
-  --json skills/new-api-manage/scripts/examples/channel.create.single.json
+bash skills/new-api-manage/scripts/newapi channel create --json skills/new-api-manage/scripts/examples/channel.create.single.json
 ```
 
 模式二：batch（同一設定、多行 key 批量建立）
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/channel/ --auth token \
-  --json skills/new-api-manage/scripts/examples/channel.create.batch.json
+bash skills/new-api-manage/scripts/newapi channel create --json skills/new-api-manage/scripts/examples/channel.create.batch.json
 ```
 
 模式三：multi_to_single（把多個 key 合併成「單一渠道、多 Key 模式」）
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/channel/ --auth token \
-  --json skills/new-api-manage/scripts/examples/channel.create.multi_to_single.json
+bash skills/new-api-manage/scripts/newapi channel create --json skills/new-api-manage/scripts/examples/channel.create.multi_to_single.json
 ```
 
 ### 6.2 更新渠道（Channel）
@@ -649,15 +697,13 @@ bash skills/new-api-manage/scripts/newapi call POST /api/channel/ --auth token \
 端點：`PUT /api/channel/`（AdminAuth）
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call PUT /api/channel/ --auth token \
-  --json skills/new-api-manage/scripts/examples/channel.update.basic.json
+bash skills/new-api-manage/scripts/newapi channel update --json skills/new-api-manage/scripts/examples/channel.update.basic.json
 ```
 
 多 Key 渠道追加 key（`key_mode=append`）
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call PUT /api/channel/ --auth token \
-  --json skills/new-api-manage/scripts/examples/channel.update.append_key.json
+bash skills/new-api-manage/scripts/newapi channel update --json skills/new-api-manage/scripts/examples/channel.update.append_key.json
 ```
 
 ### 6.3 多 Key 狀態管理
@@ -674,25 +720,26 @@ bash skills/new-api-manage/scripts/newapi call POST /api/channel/multi_key/manag
 先偵測某個渠道的上游模型變更（會把 pending 結果寫進該 channel 的 other settings，並回傳 add/remove 清單）：
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/channel/upstream_updates/detect --auth token \
-  --json skills/new-api-manage/scripts/examples/channel.upstream_updates.detect.json
+bash skills/new-api-manage/scripts/newapi channel upstream-updates detect --id 123
 ```
 
 再把你選定的變更套用回該渠道（通常你會只選一部分 add/remove，其餘 ignore）：
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/channel/upstream_updates/apply --auth token \
-  --json skills/new-api-manage/scripts/examples/channel.upstream_updates.apply.json
+bash skills/new-api-manage/scripts/newapi channel upstream-updates apply --id 123 \
+  --add 'gpt-4o,gpt-4o-mini' \
+  --remove 'deprecated-model' \
+  --ignore 'some-upstream-model-you-never-want'
 ```
 
 如果你要一鍵處理全部渠道：
 
 ```bash
 # detect all
-bash skills/new-api-manage/scripts/newapi call POST /api/channel/upstream_updates/detect_all --auth token
+bash skills/new-api-manage/scripts/newapi channel upstream-updates detect-all
 
 # apply all (會套用各 channel 當前 pending 的變更)
-bash skills/new-api-manage/scripts/newapi call POST /api/channel/upstream_updates/apply_all --auth token
+bash skills/new-api-manage/scripts/newapi channel upstream-updates apply-all
 ```
 
 ### 6.4 取得渠道 key（高風險操作）
@@ -721,15 +768,13 @@ bash skills/new-api-manage/scripts/newapi call POST /api/channel/123/key --auth 
 建立使用者：`POST /api/user/`
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/user/ --auth token \
-  --json skills/new-api-manage/scripts/examples/user.create.json
+bash skills/new-api-manage/scripts/newapi user create --json skills/new-api-manage/scripts/examples/user.create.json
 ```
 
 封禁/啟用/升降權：`POST /api/user/manage`
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/user/manage --auth token \
-  --json skills/new-api-manage/scripts/examples/user.manage.disable.json
+bash skills/new-api-manage/scripts/newapi user manage --id 123 --action disable
 ```
 
 ### 6.6 建立 Token（使用者自己的 token key）
@@ -737,8 +782,7 @@ bash skills/new-api-manage/scripts/newapi call POST /api/user/manage --auth toke
 端點：`POST /api/token/`（UserAuth）
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/token/ --auth token \
-  --json skills/new-api-manage/scripts/examples/token.create.json
+bash skills/new-api-manage/scripts/newapi token create --json skills/new-api-manage/scripts/examples/token.create.json
 ```
 
 ### 6.6.1 取得 Token Key（敏感）
@@ -746,7 +790,11 @@ bash skills/new-api-manage/scripts/newapi call POST /api/token/ --auth token \
 端點：`POST /api/token/:id/key`（UserAuth）
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call POST /api/token/123/key --auth token
+# 建議寫入檔案，避免 key 出現在終端歷史/CI log
+bash skills/new-api-manage/scripts/newapi token key --id 123 --out /tmp/newapi.token.key
+
+# 若你真的要印在 stdout（不推薦）
+# bash skills/new-api-manage/scripts/newapi token key --id 123 --stdout
 ```
 
 > 回傳的 `data.key` 就是完整 token key（含 `sk-` 前綴）。請避免貼到公開頻道或長期 log。
@@ -756,8 +804,10 @@ bash skills/new-api-manage/scripts/newapi call POST /api/token/123/key --auth to
 端點：`PUT /api/option/`
 
 ```bash
-bash skills/new-api-manage/scripts/newapi call PUT /api/option/ --auth token \
-  --json skills/new-api-manage/scripts/examples/option.update.json
+bash skills/new-api-manage/scripts/newapi option set --key RegisterEnabled --value false
+
+# 或者直接丟 JSON 檔（適合 value 很長、例如整包 JSON 字串）
+# bash skills/new-api-manage/scripts/newapi call PUT /api/option/ --auth token --json skills/new-api-manage/scripts/examples/option.update.json
 ```
 
 ### 6.8 同步上游模型資料（Admin）
