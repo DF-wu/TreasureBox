@@ -1,0 +1,9 @@
+{
+  "locale": "zh-TW",
+  "overwrite": [
+    {
+      "model_name": "gpt-4o",
+      "fields": ["description", "tags"]
+    }
+  ]
+}

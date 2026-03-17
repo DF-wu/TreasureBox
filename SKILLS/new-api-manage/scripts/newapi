@@ -1,0 +1,379 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+newapi - helper for QuantumNous/new-api management API (/api/*)
+
+Required env
+  NEW_API_BASE_URL    e.g. http://127.0.0.1:3000
+
+Auth (choose one)
+  Access Token mode:
+    NEW_API_USER_ID
+    NEW_API_ACCESS_TOKEN
+
+  Session mode:
+    NEW_API_USER_ID
+    NEW_API_COOKIE_JAR   e.g. /tmp/new-api.cookies
+
+Optional env
+  NEW_API_INSECURE=true   # curl -k
+  NEW_API_CONFIG=/path/to/config.json
+
+Commands
+  call <METHOD> <PATH> [--auth token|session|auto] [--json <file>] [--data <json>] [--output pretty|raw] [--header 'K: V']
+  login --username <u> --password <p> [--turnstile <token>] [--cookie-jar <path>]
+  login2fa --code <totp_or_backup_code> [--cookie-jar <path>]
+
+Examples
+  bash skills/new-api-manage/scripts/newapi call GET /api/status
+
+  # Token auth
+  export NEW_API_BASE_URL=http://127.0.0.1:3000
+  export NEW_API_USER_ID=1
+  export NEW_API_ACCESS_TOKEN=xxxx
+  bash skills/new-api-manage/scripts/newapi call GET /api/channel/ --auth token
+
+  # Session login (if Turnstile not required)
+  export NEW_API_COOKIE_JAR=/tmp/new-api.cookies
+  bash skills/new-api-manage/scripts/newapi login --username admin --password '...' | jq .
+
+  # If 2FA is enabled, complete login in the same cookie jar
+  bash skills/new-api-manage/scripts/newapi login2fa --code 123456 | jq .
+
+EOF
+}
+
+err() {
+  echo "[newapi] $*" >&2
+}
+
+trim_trailing_slash() {
+  local s="$1"
+  # remove all trailing slashes
+  while [[ "$s" == */ ]]; do
+    s="${s%/}"
+  done
+  echo "$s"
+}
+
+load_config_if_any() {
+  local cfg="${NEW_API_CONFIG:-}"
+  if [[ -z "$cfg" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$cfg" ]]; then
+    err "NEW_API_CONFIG not found: $cfg"
+    return 1
+  fi
+
+  # Only fill env vars when they are not set already.
+  if command -v jq >/dev/null 2>&1; then
+    NEW_API_BASE_URL="${NEW_API_BASE_URL:-$(jq -r '.base_url // empty' "$cfg")}"
+    NEW_API_USER_ID="${NEW_API_USER_ID:-$(jq -r '.user_id // empty' "$cfg")}"
+    NEW_API_ACCESS_TOKEN="${NEW_API_ACCESS_TOKEN:-$(jq -r '.access_token // empty' "$cfg")}"
+    NEW_API_COOKIE_JAR="${NEW_API_COOKIE_JAR:-$(jq -r '.cookie_jar // empty' "$cfg")}"
+  else
+    err "jq is required to load NEW_API_CONFIG"
+    return 1
+  fi
+}
+
+curl_base_args() {
+  local -a args
+  args=(-sS)
+  if [[ "${NEW_API_INSECURE:-}" == "true" || "${NEW_API_INSECURE:-}" == "1" ]]; then
+    args+=(-k)
+  fi
+  printf '%s\n' "${args[@]}"
+}
+
+require_base_url() {
+  if [[ -z "${NEW_API_BASE_URL:-}" ]]; then
+    err "missing NEW_API_BASE_URL"
+    return 1
+  fi
+}
+
+require_user_id() {
+  if [[ -z "${NEW_API_USER_ID:-}" ]]; then
+    err "missing NEW_API_USER_ID (required for any authenticated /api/* request)"
+    return 1
+  fi
+}
+
+call_cmd() {
+  local method="${1:-}"
+  local path="${2:-}"
+  shift 2 || true
+
+  if [[ -z "$method" || -z "$path" ]]; then
+    usage
+    return 1
+  fi
+
+  local auth="auto"
+  local output="pretty"
+  local json_file=""
+  local data_inline=""
+  local -a extra_headers=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --auth)
+        auth="$2"; shift 2 ;;
+      --output)
+        output="$2"; shift 2 ;;
+      --json)
+        json_file="$2"; shift 2 ;;
+      --data)
+        data_inline="$2"; shift 2 ;;
+      --header)
+        extra_headers+=("$2"); shift 2 ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        err "unknown arg: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  require_base_url
+
+  local base
+  base="$(trim_trailing_slash "$NEW_API_BASE_URL")"
+
+  # Allow PATH to be either '/api/..' or full url.
+  local url="$path"
+  if [[ "$url" != http://* && "$url" != https://* ]]; then
+    if [[ "$url" != /* ]]; then
+      url="/$url"
+    fi
+    url="$base$url"
+  fi
+
+  local use_token=false
+  local use_session=false
+  case "$auth" in
+    token)
+      use_token=true
+      ;;
+    session)
+      use_session=true
+      ;;
+    auto)
+      if [[ -n "${NEW_API_ACCESS_TOKEN:-}" ]]; then
+        use_token=true
+      elif [[ -n "${NEW_API_COOKIE_JAR:-}" ]]; then
+        use_session=true
+      else
+        # no auth
+        :
+      fi
+      ;;
+    *)
+      err "invalid --auth: $auth (expected token|session|auto)"
+      return 1
+      ;;
+  esac
+
+  local -a curl_args
+  mapfile -t curl_args < <(curl_base_args)
+  curl_args+=("-X" "$method")
+
+  # headers
+  local -a headers
+  headers=()
+  if $use_token; then
+    require_user_id
+    if [[ -z "${NEW_API_ACCESS_TOKEN:-}" ]]; then
+      err "missing NEW_API_ACCESS_TOKEN"
+      return 1
+    fi
+    headers+=("Authorization: Bearer ${NEW_API_ACCESS_TOKEN}")
+    headers+=("New-Api-User: ${NEW_API_USER_ID}")
+  elif $use_session; then
+    require_user_id
+    if [[ -z "${NEW_API_COOKIE_JAR:-}" ]]; then
+      err "missing NEW_API_COOKIE_JAR"
+      return 1
+    fi
+    headers+=("New-Api-User: ${NEW_API_USER_ID}")
+    curl_args+=("-b" "${NEW_API_COOKIE_JAR}" "-c" "${NEW_API_COOKIE_JAR}")
+  else
+    # no auth
+    if [[ -n "${NEW_API_USER_ID:-}" ]]; then
+      headers+=("New-Api-User: ${NEW_API_USER_ID}")
+    fi
+  fi
+
+  for h in "${extra_headers[@]}"; do
+    headers+=("$h")
+  done
+
+  for h in "${headers[@]}"; do
+    curl_args+=("-H" "$h")
+  done
+
+  # body
+  if [[ -n "$json_file" && -n "$data_inline" ]]; then
+    err "--json and --data are mutually exclusive"
+    return 1
+  fi
+  if [[ -n "$json_file" ]]; then
+    if [[ ! -f "$json_file" ]]; then
+      err "json file not found: $json_file"
+      return 1
+    fi
+    curl_args+=("-H" "Content-Type: application/json" "--data-binary" "@${json_file}")
+  elif [[ -n "$data_inline" ]]; then
+    curl_args+=("-H" "Content-Type: application/json" "--data-binary" "$data_inline")
+  fi
+
+  # execute
+  if [[ "$output" == "raw" ]]; then
+    curl "${curl_args[@]}" "$url"
+    return 0
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    # Best-effort pretty print. If it's not JSON, fall back to raw.
+    local out
+    out="$(curl "${curl_args[@]}" "$url" || true)"
+    if echo "$out" | jq . >/dev/null 2>&1; then
+      echo "$out" | jq .
+    else
+      echo "$out"
+    fi
+  else
+    curl "${curl_args[@]}" "$url"
+  fi
+}
+
+login_cmd() {
+  local username=""
+  local password=""
+  local turnstile=""
+  local jar="${NEW_API_COOKIE_JAR:-}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --username)
+        username="$2"; shift 2 ;;
+      --password)
+        password="$2"; shift 2 ;;
+      --turnstile)
+        turnstile="$2"; shift 2 ;;
+      --cookie-jar)
+        jar="$2"; shift 2 ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        err "unknown arg: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$username" || -z "$password" ]]; then
+    err "login requires --username and --password"
+    return 1
+  fi
+  require_base_url
+  if [[ -z "$jar" ]]; then
+    err "login requires NEW_API_COOKIE_JAR or --cookie-jar"
+    return 1
+  fi
+
+  local base
+  base="$(trim_trailing_slash "$NEW_API_BASE_URL")"
+  local url="$base/api/user/login"
+  if [[ -n "$turnstile" ]]; then
+    url="$url?turnstile=$turnstile"
+  fi
+
+  local -a curl_args
+  mapfile -t curl_args < <(curl_base_args)
+
+  curl "${curl_args[@]}" \
+    -X POST "$url" \
+    -c "$jar" -b "$jar" \
+    -H 'Content-Type: application/json' \
+    --data-binary "$(jq -nc --arg u "$username" --arg p "$password" '{username:$u,password:$p}')" \
+    | (command -v jq >/dev/null 2>&1 && jq . || cat)
+}
+
+login2fa_cmd() {
+  local code=""
+  local jar="${NEW_API_COOKIE_JAR:-}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --code)
+        code="$2"; shift 2 ;;
+      --cookie-jar)
+        jar="$2"; shift 2 ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        err "unknown arg: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$code" ]]; then
+    err "login2fa requires --code"
+    return 1
+  fi
+  require_base_url
+  if [[ -z "$jar" ]]; then
+    err "login2fa requires NEW_API_COOKIE_JAR or --cookie-jar"
+    return 1
+  fi
+
+  local base
+  base="$(trim_trailing_slash "$NEW_API_BASE_URL")"
+  local url="$base/api/user/login/2fa"
+
+  local -a curl_args
+  mapfile -t curl_args < <(curl_base_args)
+
+  curl "${curl_args[@]}" \
+    -X POST "$url" \
+    -c "$jar" -b "$jar" \
+    -H 'Content-Type: application/json' \
+    --data-binary "$(jq -nc --arg c "$code" '{code:$c}')" \
+    | (command -v jq >/dev/null 2>&1 && jq . || cat)
+}
+
+main() {
+  load_config_if_any || true
+
+  local cmd="${1:-}"
+  case "$cmd" in
+    call)
+      shift
+      call_cmd "$@"
+      ;;
+    login)
+      shift
+      login_cmd "$@"
+      ;;
+    login2fa)
+      shift
+      login2fa_cmd "$@"
+      ;;
+    -h|--help|help|"")
+      usage
+      ;;
+    *)
+      err "unknown command: $cmd"
+      usage
+      return 1
+      ;;
+  esac
+}
+
+main "$@"

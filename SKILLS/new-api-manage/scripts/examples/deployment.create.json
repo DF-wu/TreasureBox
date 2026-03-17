@@ -1,0 +1,22 @@
+{
+  "resource_private_name": "example-cluster",
+  "duration_hours": 24,
+  "gpus_per_container": 1,
+  "hardware_id": 1,
+  "location_ids": [1],
+  "container_config": {
+    "replica_count": 1,
+    "env_variables": {
+      "EXAMPLE": "true"
+    },
+    "secret_env_variables": {
+      "SECRET_EXAMPLE": "REDACTED"
+    },
+    "traffic_port": 8080
+  },
+  "registry_config": {
+    "image_url": "ghcr.io/your/image:tag",
+    "registry_username": "",
+    "registry_secret": ""
+  }
+}

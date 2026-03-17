@@ -1,0 +1,6 @@
+{
+  "base_url": "http://127.0.0.1:3000",
+  "user_id": 1,
+  "access_token": "<access_token>",
+  "cookie_jar": "/tmp/new-api.cookies"
+}

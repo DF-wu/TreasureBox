@@ -1,0 +1,6 @@
+{
+  "id": 123,
+  "add_models": ["gpt-4o", "gpt-4o-mini"],
+  "remove_models": ["deprecated-model"],
+  "ignore_models": ["some-upstream-model-you-never-want"]
+}

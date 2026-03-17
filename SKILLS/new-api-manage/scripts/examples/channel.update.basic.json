@@ -1,0 +1,13 @@
+{
+  "id": 123,
+  "name": "OpenAI - primary (updated)",
+  "status": 1,
+  "models": "gpt-4o,gpt-4o-mini",
+  "group": "default",
+  "weight": 1,
+  "priority": 0,
+  "tag": "openai",
+  "base_url": "https://api.openai.com",
+  "settings": "{}",
+  "remark": "example payload"
+}

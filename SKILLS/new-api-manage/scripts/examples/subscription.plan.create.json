@@ -1,0 +1,20 @@
+{
+  "plan": {
+    "title": "Pro",
+    "subtitle": "Monthly",
+    "price_amount": 9.99,
+    "currency": "USD",
+    "duration_unit": "month",
+    "duration_value": 1,
+    "custom_seconds": 0,
+    "enabled": true,
+    "sort_order": 0,
+    "stripe_price_id": "",
+    "creem_product_id": "",
+    "max_purchase_per_user": 0,
+    "upgrade_group": "default",
+    "total_amount": 0,
+    "quota_reset_period": "never",
+    "quota_reset_custom_seconds": 0
+  }
+}

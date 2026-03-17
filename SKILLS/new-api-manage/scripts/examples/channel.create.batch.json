@@ -1,0 +1,19 @@
+{
+  "mode": "batch",
+  "multi_key_mode": "random",
+  "batch_add_set_key_prefix_2_name": true,
+  "channel": {
+    "type": 1,
+    "name": "OpenAI - batch",
+    "key": "sk-KEY_1\nsk-KEY_2\nsk-KEY_3",
+    "base_url": "https://api.openai.com",
+    "models": "gpt-4o,gpt-4o-mini",
+    "group": "default",
+    "status": 1,
+    "weight": 1,
+    "priority": 0,
+    "tag": "openai",
+    "settings": "{}",
+    "remark": "example payload"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "example-token",
+  "expired_time": -1,
+  "unlimited_quota": true,
+  "remain_quota": 0,
+  "model_limits_enabled": false,
+  "model_limits": "",
+  "allow_ips": "",
+  "group": "default",
+  "cross_group_retry": false
+}
