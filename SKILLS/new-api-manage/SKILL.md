@@ -263,6 +263,11 @@ jq -r '.paths | keys[]' "$NEW_API_CODE_DIR/docs/openapi/api.json" | sort
 - `GET  /api/pricing`（可匿名；登入後會多回一些資訊）
 - `GET  /api/ratio_config`（需後端啟用 expose ratio）
 
+金流 Webhook（通常不需要人手呼叫；給金流平台 callback 用）：
+
+- `POST /api/stripe/webhook`
+- `POST /api/creem/webhook`
+
 ### 5.2 OAuth / 驗證信
 
 - `GET /api/verification`（寄 email 驗證碼，可能需要 Turnstile）
