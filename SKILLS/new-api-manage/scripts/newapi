@@ -5,6 +5,9 @@ usage() {
   cat <<'EOF'
 newapi - production CLI helper for QuantumNous/new-api management API (/api/*)
 
+Examples below assume you run from the skill root. If not, replace
+`scripts/newapi` with the actual path to this file.
+
 Global options (must appear before <command>)
   --config <path>       # same as NEW_API_CONFIG
   --insecure            # same as NEW_API_INSECURE=true (curl -k)
@@ -30,7 +33,7 @@ Optional env
   NEW_API_CODE_DIR=/path/to/new-api-repo   # for route generation
 
 Commands
-  doctor
+  doctor [--deep] [--json]
   call <METHOD> <PATH> [--auth token|session|sk|auto|none] [--json <file>] [--data <json>] [--output pretty|raw] [--header 'K: V']
   login --username <u> --password <p> [--turnstile <token>] [--cookie-jar <path>]
   login2fa --code <totp_or_backup_code> [--cookie-jar <path>]
@@ -367,27 +370,222 @@ call_cmd() {
   fi
 }
 
+doctor_probe() {
+  local label="$1"
+  local method="$2"
+  local path="$3"
+  local auth="$4"
+  local severity="${5:-hard}"
+
+  require_jq
+
+  local resp=""
+  local stderr_file=""
+  stderr_file="$(mktemp)"
+
+  local status="pass"
+  local success="unknown"
+  local message=""
+  local data_type=""
+
+  if ! resp="$(call_cmd "$method" "$path" --auth "$auth" --output raw 2>"$stderr_file")"; then
+    status="fail"
+    success="false"
+    message="$(tr '\n' ' ' <"$stderr_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+  elif echo "$resp" | jq . >/dev/null 2>&1; then
+    success="$(echo "$resp" | jq -r 'if has("success") then (.success|tostring) else "unknown" end')"
+    message="$(echo "$resp" | jq -r '.message // ""')"
+    data_type="$(echo "$resp" | jq -r 'if has("data") then (.data|type) else "" end')"
+    if [[ "$success" == "false" ]]; then
+      if [[ "$severity" == "soft" ]]; then
+        status="soft_fail"
+      else
+        status="fail"
+      fi
+    fi
+  else
+    status="fail"
+    success="false"
+    message="non-JSON response"
+    data_type="text"
+  fi
+
+  rm -f "$stderr_file"
+
+  jq -nc \
+    --arg name "$label" \
+    --arg method "$method" \
+    --arg path "$path" \
+    --arg auth "$auth" \
+    --arg severity "$severity" \
+    --arg status "$status" \
+    --arg success "$success" \
+    --arg message "$message" \
+    --arg data_type "$data_type" \
+    '{
+      name: $name,
+      method: $method,
+      path: $path,
+      auth: $auth,
+      severity: $severity,
+      status: $status,
+      success: $success,
+      message: $message,
+      data_type: $data_type
+    }'
+}
+
+doctor_render_summary() {
+  local checks_file="$1"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    local name status severity message icon
+    name="$(echo "$line" | jq -r '.name')"
+    status="$(echo "$line" | jq -r '.status')"
+    severity="$(echo "$line" | jq -r '.severity')"
+    message="$(echo "$line" | jq -r '.message // ""')"
+    case "$status" in
+      pass) icon="PASS" ;;
+      soft_fail) icon="SOFT" ;;
+      skip) icon="SKIP" ;;
+      *) icon="FAIL" ;;
+    esac
+    if [[ -n "$message" ]]; then
+      printf '[doctor] %-4s %-24s %s (%s)\n' "$icon" "$name" "$message" "$severity"
+    else
+      printf '[doctor] %-4s %-24s (%s)\n' "$icon" "$name" "$severity"
+    fi
+  done <"$checks_file"
+}
+
 doctor_cmd() {
   require_base_url
-  local base
+
+  local deep="false"
+  local json_summary="false"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --deep) deep="true"; shift ;;
+      --json) json_summary="true"; shift ;;
+      -h|--help)
+        usage; return 0 ;;
+      *)
+        err "unknown arg: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  local base auth_mode auth_for_checks
   base="$(trim_trailing_slash "$NEW_API_BASE_URL")"
-  echo "[doctor] base_url=$base" >&2
-  echo "[doctor] user_id=${NEW_API_USER_ID:-<unset>}" >&2
-  if [[ -n "${NEW_API_ACCESS_TOKEN:-}" ]]; then
-    echo "[doctor] auth=access_token (Authorization: Bearer …)" >&2
-  elif [[ -n "${NEW_API_COOKIE_JAR:-}" ]]; then
-    echo "[doctor] auth=session_cookie (cookie jar: ${NEW_API_COOKIE_JAR})" >&2
-  else
-    echo "[doctor] auth=none" >&2
-  fi
-
-  echo "[doctor] GET /api/status" >&2
-  call_cmd GET /api/status --auth none
-
+  auth_mode="none"
+  auth_for_checks=""
   if [[ -n "${NEW_API_ACCESS_TOKEN:-}" && -n "${NEW_API_USER_ID:-}" ]]; then
-    echo "[doctor] GET /api/user/self (token)" >&2
-    call_cmd GET /api/user/self --auth token
+    auth_mode="token"
+    auth_for_checks="token"
+  elif [[ -n "${NEW_API_COOKIE_JAR:-}" && -n "${NEW_API_USER_ID:-}" ]]; then
+    auth_mode="session"
+    auth_for_checks="session"
   fi
+
+  if [[ "$deep" != "true" && "$json_summary" != "true" ]]; then
+    echo "[doctor] base_url=$base" >&2
+    echo "[doctor] user_id=${NEW_API_USER_ID:-<unset>}" >&2
+    case "$auth_mode" in
+      token)
+        echo "[doctor] auth=access_token (Authorization: Bearer …)" >&2 ;;
+      session)
+        echo "[doctor] auth=session_cookie (cookie jar: ${NEW_API_COOKIE_JAR})" >&2 ;;
+      *)
+        echo "[doctor] auth=none" >&2 ;;
+    esac
+
+    echo "[doctor] GET /api/status" >&2
+    call_cmd GET /api/status --auth none
+
+    if [[ -n "$auth_for_checks" ]]; then
+      echo "[doctor] GET /api/user/self ($auth_for_checks)" >&2
+      call_cmd GET /api/user/self --auth "$auth_for_checks"
+    fi
+    return 0
+  fi
+
+  require_jq
+
+  local checks_file
+  checks_file="$(mktemp)"
+  doctor_probe "status" GET "/api/status" none hard >>"$checks_file"
+
+  local role=0
+  if [[ -n "$auth_for_checks" ]]; then
+    doctor_probe "user-self" GET "/api/user/self" "$auth_for_checks" hard >>"$checks_file"
+    local self_resp=""
+    if self_resp="$(call_cmd GET /api/user/self --auth "$auth_for_checks" --output raw 2>/dev/null)"; then
+      role="$(echo "$self_resp" | jq -r '.data.role // 0')"
+      [[ "$role" == "null" || -z "$role" ]] && role=0
+    fi
+  fi
+
+  if [[ "$deep" == "true" ]]; then
+    if [[ -n "$auth_for_checks" ]]; then
+      if (( role >= 1 )); then
+        doctor_probe "subscription-plans" GET "/api/subscription/plans" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "subscription-self" GET "/api/subscription/self" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "data-self" GET "/api/data/self" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "task-self" GET "/api/task/self" "$auth_for_checks" hard >>"$checks_file"
+      fi
+
+      if (( role >= 10 )); then
+        doctor_probe "channel-list" GET "/api/channel/?p=1&page_size=1" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "token-list" GET "/api/token/?p=1&page_size=1" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "models-list" GET "/api/models/?p=1&page_size=1" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "vendors-list" GET "/api/vendors/?p=1&page_size=1" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "group-list" GET "/api/group/" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "prefill-group-list" GET "/api/prefill_group/" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "redemption-list" GET "/api/redemption/?p=1&page_size=1" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "performance-stats" GET "/api/performance/stats" "$auth_for_checks" hard >>"$checks_file"
+      fi
+
+      if (( role >= 100 )); then
+        doctor_probe "option-get" GET "/api/option/" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "subscription-admin-plans" GET "/api/subscription/admin/plans" "$auth_for_checks" hard >>"$checks_file"
+        doctor_probe "deployments-settings" GET "/api/deployments/settings" "$auth_for_checks" soft >>"$checks_file"
+      fi
+    fi
+  fi
+
+  if [[ "$json_summary" == "true" ]]; then
+    jq -s \
+      --arg base_url "$base" \
+      --arg auth_mode "$auth_mode" \
+      --arg user_id "${NEW_API_USER_ID:-}" \
+      --argjson role "$role" \
+      '{
+        base_url: $base_url,
+        auth_mode: $auth_mode,
+        user_id: (if $user_id == "" then null else $user_id end),
+        role: $role,
+        summary: {
+          total: length,
+          pass: ([.[] | select(.status == "pass")] | length),
+          soft_fail: ([.[] | select(.status == "soft_fail")] | length),
+          fail: ([.[] | select(.status == "fail")] | length)
+        },
+        checks: .
+      }' "$checks_file"
+  else
+    echo "[doctor] base_url=$base" >&2
+    echo "[doctor] user_id=${NEW_API_USER_ID:-<unset>} role=$role auth=$auth_mode" >&2
+    if [[ -z "$auth_for_checks" ]]; then
+      echo "[doctor] authenticated checks skipped: set NEW_API_USER_ID + NEW_API_ACCESS_TOKEN or NEW_API_COOKIE_JAR" >&2
+    fi
+    doctor_render_summary "$checks_file" >&2
+  fi
+
+  local fail_count
+  fail_count="$(jq -s '[.[] | select(.status == "fail")] | length' "$checks_file")"
+  rm -f "$checks_file"
+  [[ "$fail_count" == "0" ]]
 }
 
 routes_cmd() {
