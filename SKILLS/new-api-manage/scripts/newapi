@@ -1897,6 +1897,10 @@ log_channel_affinity_usage_cache_cmd() {
       *) err "unknown arg: $1"; return 1 ;;
     esac
   done
+  if [[ -z "$rule_name" || -z "$key_fp" ]]; then
+    err "log channel-affinity-usage-cache requires --rule-name and --key-fp"
+    return 1
+  fi
   local qs=""
   [[ -n "$rule_name" ]] && qs="${qs}rule_name=$(urlencode "$rule_name")"
   [[ -n "$key_fp" ]] && qs="${qs:+$qs&}key_fp=$(urlencode "$key_fp")"

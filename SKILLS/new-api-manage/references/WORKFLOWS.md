@@ -147,10 +147,13 @@ bash scripts/newapi performance gc --yes
 ```bash
 bash scripts/newapi usage token --auth sk
 bash scripts/newapi log token --auth sk
+bash scripts/newapi log channel-affinity-usage-cache --rule-name '<rule-name>' --key-fp '<key-fp>'
 bash scripts/newapi data self
 bash scripts/newapi task self
 bash scripts/newapi redemption list --p 1 --page-size 20
 ```
+
+`log channel-affinity-usage-cache` 需要 `--rule-name` 與 `--key-fp`；`--using-group` 只是額外縮小範圍。
 
 ---
 
