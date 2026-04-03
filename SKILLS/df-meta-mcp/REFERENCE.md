@@ -4,10 +4,12 @@
 
 This file is the operational quick-start for DF's MetaMCP endpoint skill.
 
+Assume the current working directory is the **skill root**. If it is not, replace `scripts/dfmcp` and `scripts/sync_catalog.py` with the actual installed path of this skill.
+
 ## Endpoint
 
 - URL: `https://metamcp.dfder.tw/metamcp/chatbot/mcp`
-- Wrapper: `/data/skills/df-meta-mcp/scripts/dfmcp`
+- Wrapper: `scripts/dfmcp`
 
 The wrapper uses:
 
@@ -22,16 +24,16 @@ so you do not have to worry about Node runtime mismatches.
 List tools:
 
 ```bash
-bash /data/skills/df-meta-mcp/scripts/dfmcp list
-bash /data/skills/df-meta-mcp/scripts/dfmcp list --schema
-bash /data/skills/df-meta-mcp/scripts/dfmcp list --json
+bash scripts/dfmcp list
+bash scripts/dfmcp list --schema
+bash scripts/dfmcp list --json
 ```
 
 Call a tool:
 
 ```bash
-bash /data/skills/df-meta-mcp/scripts/dfmcp call github_mcp__get_me --output json
-bash /data/skills/df-meta-mcp/scripts/dfmcp call github_mcp__search_repositories --args '{"query":"DF-wu lilac-mono"}' --output json
+bash scripts/dfmcp call github_mcp__get_me --output json
+bash scripts/dfmcp call github_mcp__search_repositories --args '{"query":"DF-wu lilac-mono"}' --output json
 ```
 
 ## Always prefer these calling conventions
@@ -39,7 +41,7 @@ bash /data/skills/df-meta-mcp/scripts/dfmcp call github_mcp__search_repositories
 ### For objects / arrays / nested payloads
 
 ```bash
-bash /data/skills/df-meta-mcp/scripts/dfmcp call <tool> --args '{"key":"value","items":[1,2,3]}' --output json
+bash scripts/dfmcp call <tool> --args '{"key":"value","items":[1,2,3]}' --output json
 ```
 
 ### For simple scalar parameters
@@ -66,7 +68,7 @@ This is optional. The skill does **not** require that config entry because the w
 ## Refresh the generated catalogs
 
 ```bash
-python3 /data/skills/df-meta-mcp/scripts/sync_catalog.py
+python3 scripts/sync_catalog.py
 ```
 
 This updates:

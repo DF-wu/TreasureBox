@@ -46,7 +46,8 @@ case "$cmd" in
     ;;
   refresh)
     shift || true
-    exec python3 /data/skills/df-meta-mcp/scripts/sync_catalog.py "$@"
+    SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+    exec python3 "$SCRIPT_DIR/sync_catalog.py" "$@"
     ;;
   -h|--help|help|"")
     usage

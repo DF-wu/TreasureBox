@@ -9,6 +9,8 @@ metadata: {"clawdbot":{"requires":{"skills":["mcporter"],"bins":["mcporter","bun
 
 Use this skill when the task is best solved through **DF's MetaMCP endpoint** instead of local files or generic web search.
 
+Assume the current working directory is the **skill root**. If it is not, replace paths like `scripts/dfmcp` or `references/...` with the actual installed path of this skill.
+
 This endpoint currently exposes four high-value families plus one advanced helper:
 
 - **GitHub** — repositories, issues, pull requests, comments, reviews, releases, branches, tags, code search, repo/user search, Copilot delegation/review, secret scanning.
@@ -55,8 +57,8 @@ For the machine-generated live inventory, use:
 Use the wrapper script so you don't have to remember the full endpoint URL.
 
 ```bash
-bash /data/skills/df-meta-mcp/scripts/dfmcp list
-bash /data/skills/df-meta-mcp/scripts/dfmcp call github_mcp__search_repositories --args '{"query":"lilac mono"}' --output json
+bash scripts/dfmcp list
+bash scripts/dfmcp call github_mcp__search_repositories --args '{"query":"lilac mono"}' --output json
 ```
 
 The wrapper runs `mcporter` via **Bun**, which is the safest default here.
@@ -87,7 +89,7 @@ Keep these distinctions straight:
 This skill includes a catalog sync script. When the endpoint tool inventory changes, refresh it with:
 
 ```bash
-python3 /data/skills/df-meta-mcp/scripts/sync_catalog.py
+python3 scripts/sync_catalog.py
 ```
 
 That regenerates the family inventories under `references/*.generated.md` from the live endpoint.
