@@ -11,13 +11,13 @@ Assume the current working directory is the **skill root**. If it is not, replac
 - URL: `https://metamcp.dfder.tw/metamcp/chatbot/mcp`
 - Wrapper: `scripts/dfmcp`
 
-The wrapper uses:
+The wrapper prefers a locally installed `mcporter` binary, and falls back to:
 
 ```bash
-bun "$(command -v mcporter)" ...
+npx -y mcporter ...
 ```
 
-so you do not have to worry about Node runtime mismatches.
+So it remains usable even on machines where `mcporter` is not installed globally.
 
 ## The two commands you will use most
 

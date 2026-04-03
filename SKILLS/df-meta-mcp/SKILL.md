@@ -1,8 +1,8 @@
 ---
 name: df-meta-mcp
-description: Use DF MetaMCP via mcporter for GitHub repos/issues/PRs/code search/reviews/Copilot, TickTick tasks/projects, Context7 docs, and DeepWiki repo Q&A.
+description: Use DF MetaMCP via mcporter for GitHub repos/issues/PRs/code search/reviews/Copilot, TickTick tasks/projects, Context7 docs, DeepWiki repo Q&A, and Tavily web search.
 homepage: https://metamcp.dfder.tw/metamcp/chatbot/mcp
-metadata: {"clawdbot":{"requires":{"skills":["mcporter"],"bins":["mcporter","bun","python3"]}}}
+metadata: {"clawdbot":{"requires":{"skills":["mcporter"],"bins":["python3","node","npm"]}}}
 ---
 
 # df-meta-mcp
@@ -11,12 +11,13 @@ Use this skill when the task is best solved through **DF's MetaMCP endpoint** in
 
 Assume the current working directory is the **skill root**. If it is not, replace paths like `scripts/dfmcp` or `references/...` with the actual installed path of this skill.
 
-This endpoint currently exposes four high-value families plus one advanced helper:
+This endpoint currently exposes five high-value families plus one advanced helper:
 
 - **GitHub** — repositories, issues, pull requests, comments, reviews, releases, branches, tags, code search, repo/user search, Copilot delegation/review, secret scanning.
 - **TickTick** — tasks, projects, filtering, batch updates, completion, time-based queries.
 - **Context7** — up-to-date library/framework docs and code examples.
 - **DeepWiki** — repository wiki/topic structure, wiki contents, and repo-aware Q&A.
+- **Tavily** — general web search / extraction / site-map style discovery for live web research.
 - **Sequential Thinking** — an advanced planning / tool-orchestration helper for explicitly structured multi-step reasoning.
 
 Do **not** load every reference file up front. Follow Lilac's progressive-disclosure style:
@@ -40,7 +41,7 @@ Choose the family file before making calls:
 
 - **GitHub work** → `references/GITHUB.md`
 - **TickTick task/project work** → `references/TICKTICK.md`
-- **Framework/library docs or repo knowledge lookup** → `references/DOCS_AND_RESEARCH.md`
+- **Framework/library docs, repo knowledge lookup, or general web search** → `references/DOCS_AND_RESEARCH.md`
 - **Explicit stepwise planning / tool recommendation** → `references/SEQUENTIAL_THINKING.md`
 
 For the machine-generated live inventory, use:
@@ -50,6 +51,7 @@ For the machine-generated live inventory, use:
 - `references/ticktick.generated.md`
 - `references/context7.generated.md`
 - `references/deepwiki.generated.md`
+- `references/tavily-hikari.generated.md`
 - `references/sequentialthinking.generated.md`
 
 ## Default execution pattern
@@ -61,7 +63,7 @@ bash scripts/dfmcp list
 bash scripts/dfmcp call github_mcp__search_repositories --args '{"query":"lilac mono"}' --output json
 ```
 
-The wrapper runs `mcporter` via **Bun**, which is the safest default here.
+The wrapper uses **`mcporter` if it is already installed**, and otherwise falls back to **`npx -y mcporter`**.
 
 Prefer `--output json` for machine-readable results. Prefer `--args '{...}'` whenever the tool takes arrays, nested objects, or booleans.
 
@@ -82,6 +84,7 @@ Keep these distinctions straight:
 - **DeepWiki vs Context7**:
   - Context7 = external library/framework docs
   - DeepWiki = knowledge about a specific GitHub repository
+- **Tavily** = generic live web search and extraction when the task is broader than package docs or a single repo.
 - **Sequential Thinking** is optional and advanced. Use it only when explicit multi-step planning/tool recommendation is the task itself.
 
 ## Maintenance

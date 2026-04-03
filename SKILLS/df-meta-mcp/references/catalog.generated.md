@@ -1,7 +1,7 @@
 # MetaMCP live catalog
 
 - Endpoint: `https://metamcp.dfder.tw/metamcp/chatbot/mcp`
-- Tool count: **72**
+- Tool count: **78**
 
 ## Families
 
@@ -9,6 +9,7 @@
 - **DeepWiki** (`deepwiki`) — 3 tools → `deepwiki.generated.md`
 - **GitHub** (`github_mcp`) — 44 tools → `github.generated.md`
 - **Sequential Thinking** (`mcp-sequentialthinking-tools`) — 1 tools → `sequentialthinking.generated.md`
+- **Tavily** (`tavily-hikari`) — 6 tools → `tavily-hikari.generated.md`
 - **TickTick** (`ticktick`) — 22 tools → `ticktick.generated.md`
 
 ## Notes

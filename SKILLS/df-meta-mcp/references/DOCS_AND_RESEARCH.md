@@ -2,12 +2,13 @@
 
 # DOCS_AND_RESEARCH
 
-This family combines **Context7** and **DeepWiki**.
+This family combines **Context7**, **DeepWiki**, and **Tavily**.
 
 ## Which one to use
 
 - **Context7** → use for external libraries/frameworks/packages, current API docs, and code examples.
 - **DeepWiki** → use for knowledge about a specific GitHub repository: wiki structure, wiki contents, or repo-aware Q&A.
+- **Tavily** → use for broader live web research, search, extraction, and discovery when the task is not limited to a package docsite or one GitHub repo.
 
 ## Context7 rules
 
@@ -25,3 +26,4 @@ This family combines **Context7** and **DeepWiki**.
 
 - `references/context7.generated.md`
 - `references/deepwiki.generated.md`
+- `references/tavily-hikari.generated.md`

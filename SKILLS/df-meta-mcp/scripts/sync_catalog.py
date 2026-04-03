@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ FAMILY_TITLES = {
     "ticktick": "TickTick",
     "context7": "Context7",
     "deepwiki": "DeepWiki",
+    "tavily-hikari": "Tavily",
     "mcp-sequentialthinking-tools": "Sequential Thinking",
 }
 
@@ -26,27 +28,26 @@ def main() -> int:
     references_dir = skill_root / "references"
     references_dir.mkdir(parents=True, exist_ok=True)
 
-    mcporter = shutil_which("mcporter")
-    if not mcporter:
-        raise SystemExit("mcporter not found in PATH")
+    mcporter_cmd = resolve_mcporter_cmd()
 
-    result = subprocess.run(
-        [
-            "bun",
-            mcporter,
-            "list",
-            "--http-url",
-            ENDPOINT,
-            "--name",
-            NAME,
-            "--json",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    with tempfile.NamedTemporaryFile("w+", encoding="utf-8", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
 
-    data = json.loads(result.stdout)
+    try:
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            subprocess.run(
+                [*mcporter_cmd, "list", "--http-url", ENDPOINT, "--name", NAME, "--json"],
+                check=True,
+                stdout=handle,
+                text=True,
+            )
+
+        data = json.loads(tmp_path.read_text(encoding="utf-8"))
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
     (references_dir / "catalog.raw.json").write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
@@ -197,6 +198,15 @@ def shutil_which(name: str) -> str | None:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     return None
+
+
+def resolve_mcporter_cmd() -> list[str]:
+    mcporter = shutil_which("mcporter")
+    if mcporter:
+        return [mcporter]
+    if shutil_which("npx"):
+        return ["npx", "-y", "mcporter"]
+    raise SystemExit("Neither mcporter nor npx is available in PATH")
 
 
 if __name__ == "__main__":
