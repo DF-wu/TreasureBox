@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENDPOINT="https://metamcp.dfder.tw/metamcp/chatbot/mcp"
+NAME="dfmcp"
+MCPORTER_BIN="$(command -v mcporter)"
+
+if [[ -z "$MCPORTER_BIN" ]]; then
+  echo "mcporter not found in PATH" >&2
+  exit 127
+fi
+
+usage() {
+  cat <<'EOF'
+dfmcp - wrapper around mcporter for DF's MetaMCP endpoint
+
+Usage:
+  dfmcp list [mcporter list flags...]
+  dfmcp call <tool> [mcporter call args...]
+  dfmcp refresh
+
+Examples:
+  dfmcp list --schema
+  dfmcp call github_mcp__get_me --output json
+  dfmcp call github_mcp__search_repositories --args '{"query":"lilac mono"}' --output json
+  dfmcp refresh
+EOF
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  list)
+    shift
+    exec bun "$MCPORTER_BIN" list --http-url "$ENDPOINT" --name "$NAME" "$@"
+    ;;
+  call)
+    shift
+    tool="${1:-}"
+    if [[ -z "$tool" ]]; then
+      echo "missing tool name" >&2
+      usage >&2
+      exit 2
+    fi
+    shift
+    exec bun "$MCPORTER_BIN" call "$ENDPOINT.$tool" "$@"
+    ;;
+  refresh)
+    shift || true
+    exec python3 /data/skills/df-meta-mcp/scripts/sync_catalog.py "$@"
+    ;;
+  -h|--help|help|"")
+    usage
+    ;;
+  *)
+    echo "unknown command: $cmd" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
