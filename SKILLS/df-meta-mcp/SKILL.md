@@ -11,6 +11,8 @@ Use this skill when the task is best solved through **DF's MetaMCP endpoint** in
 
 Assume the current working directory is the **skill root**. If it is not, replace paths like `scripts/dfmcp` or `references/...` with the actual installed path of this skill.
 
+Do **not** use this skill for purely local filesystem, git, or shell work when built-in tools already cover the task. Reach for this skill when the task needs **remote services behind DF's MetaMCP endpoint**.
+
 This endpoint currently exposes five high-value families plus one advanced helper:
 
 - **GitHub** — repositories, issues, pull requests, comments, reviews, releases, branches, tags, code search, repo/user search, Copilot delegation/review, secret scanning.
@@ -44,6 +46,8 @@ Choose the family file before making calls:
 - **Framework/library docs, repo knowledge lookup, or general web search** → `references/DOCS_AND_RESEARCH.md`
 - **Explicit stepwise planning / tool recommendation** → `references/SEQUENTIAL_THINKING.md`
 
+For mutation-heavy work, read the matching family guide **before** calling write/update tools.
+
 For the machine-generated live inventory, use:
 
 - `references/catalog.generated.md`
@@ -72,6 +76,8 @@ Prefer `--output json` for machine-readable results. Prefer `--args '{...}'` whe
 Keep these distinctions straight:
 
 - **GitHub `list_*` vs `search_*`**: use `list_*` when you already know the repo; use `search_*` when searching across GitHub or when the query needs GitHub search syntax.
+- **Read before write**: before mutating GitHub issues/PRs/files or TickTick tasks/projects, first fetch/list/search the target object unless the user already provided canonical IDs and exact values.
+- **Resolve ambiguity first**: if multiple repos/tasks/issues could match, stop and disambiguate with a read/search step instead of guessing.
 - **Issue/PR comments vs reviews**:
   - `add_issue_comment` = normal issue / PR conversation comment
   - `pull_request_review_write` = create/submit/delete a PR review
@@ -87,6 +93,12 @@ Keep these distinctions straight:
 - **Tavily** = generic live web search and extraction when the task is broader than package docs or a single repo.
 - **Sequential Thinking** is optional and advanced. Use it only when explicit multi-step planning/tool recommendation is the task itself.
 
+## Validation and failure handling
+
+- Prefer `bash scripts/dfmcp call <tool> --output json` so results stay machine-readable.
+- If a tool call fails, check the matching generated family file for required params and retry with a fully explicit `--args '{...}'` payload.
+- If the task only needs one family, read only that family doc and its generated inventory. Do **not** load every generated file.
+
 ## Maintenance
 
 This skill includes a catalog sync script. When the endpoint tool inventory changes, refresh it with:
@@ -96,13 +108,3 @@ python3 scripts/sync_catalog.py
 ```
 
 That regenerates the family inventories under `references/*.generated.md` from the live endpoint.
-
-## Design rationale
-
-This skill intentionally keeps the always-visible description short and pushes the full tool inventory into on-demand reference files. That matches the strongest patterns found in:
-
-- Anthropic's skill authoring / Claude Code extension docs
-- MCP Skills Bridge with MCPorter
-- dynamic loading / RAG-style approaches for avoiding MCP prompt bloat
-
-If you need the research notes and source links, open **`RESEARCH.md`**.

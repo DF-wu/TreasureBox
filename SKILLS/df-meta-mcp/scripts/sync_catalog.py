@@ -48,10 +48,6 @@ def main() -> int:
             tmp_path.unlink(missing_ok=True)
         except Exception:
             pass
-    (references_dir / "catalog.raw.json").write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-
     tools = data.get("tools", [])
     grouped: dict[str, list[dict[str, Any]]] = {}
     for tool in tools:

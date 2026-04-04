@@ -53,14 +53,14 @@ You may pass inline key/value arguments if the tool is simple, but `--args` is s
 If you want shorter raw `mcporter` commands outside the wrapper:
 
 ```bash
-bun "$(command -v mcporter)" config add --scope home dfmcp https://metamcp.dfder.tw/metamcp/chatbot/mcp
+npx -y mcporter config add --scope home dfmcp https://metamcp.dfder.tw/metamcp/chatbot/mcp
 ```
 
 Then:
 
 ```bash
-bun "$(command -v mcporter)" list dfmcp --schema
-bun "$(command -v mcporter)" call dfmcp.github_mcp__get_me --output json
+npx -y mcporter list dfmcp --schema
+npx -y mcporter call dfmcp.github_mcp__get_me --output json
 ```
 
 This is optional. The skill does **not** require that config entry because the wrapper already hardcodes the endpoint.
@@ -73,7 +73,6 @@ python3 scripts/sync_catalog.py
 
 This updates:
 
-- `references/catalog.raw.json`
 - `references/catalog.generated.md`
 - one generated markdown file per family
 
@@ -81,7 +80,7 @@ This updates:
 
 - GitHub → `references/GITHUB.md`
 - TickTick → `references/TICKTICK.md`
-- Context7 / DeepWiki → `references/DOCS_AND_RESEARCH.md`
+- Context7 / DeepWiki / Tavily → `references/DOCS_AND_RESEARCH.md`
 - Sequential thinking helper → `references/SEQUENTIAL_THINKING.md`
 
 ## Practical defaults
@@ -89,5 +88,6 @@ This updates:
 - Prefer `--output json`
 - Prefer `--args '{...}'`
 - Do not dump the full catalog into context unless you actually need it
+- Read/search the target object before mutation whenever IDs or exact targets are not already known
 - Read only the relevant family file first
 - Use the generated family files when you need exact tool names or required parameters
