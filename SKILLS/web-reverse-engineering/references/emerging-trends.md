@@ -52,17 +52,59 @@ Agents now orchestrate planning + execution loops:
 
 This is powerful, but guardrails are mandatory to prevent runaway behavior and legal exposure.
 
-## 6) Practical Recommendations
+## 6) Mobile-First API Exposure
+
+More services expose richer APIs through mobile apps than through web:
+- fewer anti-bot layers on mobile endpoints
+- simpler authentication flows
+- less obfuscation
+
+Implication:
+- mobile app RE (mitmproxy + Frida) is increasingly the optimal first approach.
+
+## 7) WASM and Binary Logic in Browsers
+
+WebAssembly modules now handle crypto, signing, and protocol logic:
+- JS is just the glue; core algorithms are in WASM
+- standard JS hooking misses the critical path
+
+Implication:
+- WASM decompilation and native analysis skills are becoming necessary for web targets.
+
+## 8) Protocol Diversification Beyond HTTP
+
+Real-time features increasingly use:
+- WebSocket for live updates
+- gRPC-web for internal APIs exposed to browser
+- Custom protobuf over WebSocket
+- SSE for push notifications
+
+Implication:
+- DevTools Network panel skills must extend beyond XHR/fetch to WebSocket and gRPC frames.
+
+## 9) Tool Ecosystem Maturation
+
+The stealth tooling landscape is consolidating:
+- `curl_cffi` is becoming the standard Python HTTP client for anti-bot
+- `Camoufox` and `Patchright` are replacing vanilla Playwright for serious targets
+- `DrissionPage` is dominant in Chinese-language anti-bot stacks
+- Go (`Rod`, `chromedp`) and Rust (`chromiumoxide`) are gaining ground for performance-critical deployments
+
+## Practical Recommendations
 
 - keep a dual stack: cheap HTTP path + browser escalation path
+- add a mobile interception path for API-heavy services
 - log every challenge type and outcome
 - version parser logic and extraction prompts
 - preserve raw evidence for reprocessing and audits
+- maintain tool-alternatives literacy: know what replaces what before you need it
 
 ## Watchlist
 
 - stricter AI crawler governance and content-use controls
 - increasing use of browser integrity checks tied to platform trust signals
 - broader use of defensive behavioral biometrics
+- WASM-based challenge protocols replacing pure JS
+- QUIC/HTTP3 fingerprinting as a new detection layer
 
 Treat this field as continuous operations, not a one-time implementation.

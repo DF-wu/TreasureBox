@@ -1,63 +1,72 @@
-# Legal and Ethical Guardrails
+# Legal and Practical Risk Framework
 
-This is an engineering reference, not legal advice.
+This is an engineering reference, not legal advice. Use it to build intuition, then verify with counsel for your jurisdiction and use case.
 
-## Core Risk Domains
+## Critical Distinction: Criminal vs Civil
 
-1. unauthorized access laws
-2. contract/terms-of-service violations
-3. privacy and personal-data regulation
-4. copyright/database-rights exposure
-5. anti-circumvention issues
+| Category | What it is | Typical trigger |
+|---|---|---|
+| **Criminal unauthorized access** | Violating computer fraud statutes (CFAA, etc.) | Bypassing technical access controls: passwords, encryption, authentication gates |
+| **Civil contract dispute** | Violating Terms of Service | Scraping public pages after the provider says "don't" |
+| **Privacy regulation** | GDPR, CCPA, etc. | Collecting, processing, or retaining personal data |
+| **IP/database rights** | Copyright, sui generis database rights | Replicating creative selection/arrangement or substantial database investment |
 
-## Jurisdictional Signals (High Level)
+**The key insight:** In most jurisdictions, scraping publicly available data from unauthenticated pages does not constitute criminal "unauthorized access." The hiQ v. LinkedIn precedent (US) and similar rulings elsewhere established that technical barriers matter, not contractual text alone.
 
-- US: public-data scraping can be lower risk than access behind authentication gates, but context matters.
-- EU/UK: personal data processing obligations can apply even to scraped public pages.
-- Global: terms enforcement and civil claims vary widely by venue and business impact.
+## When ToS Actually Matters
+
+- **Civil breach of contract claims:** Possible, but platforms rarely sue over public data scraping unless volume is massive or commercial harm is demonstrable.
+- **Platform retaliation:** Account bans, IP blocks, API key revocation. This is operational risk, not legal risk.
+- **CFAA (US) narrowing:** Post-Van Buren and hiQ, "exceeding authorized access" requires bypassing a technical gate, not violating use policy.
 
 ## Practical Risk Matrix
 
-| Scenario | Relative risk |
-|---|---|
-| public pages, moderate rate, no personal data | low-medium |
-| authenticated scraping or paywall bypass | high |
-| large-scale personal data collection | high |
-| active anti-bot circumvention with commercial reuse | high |
+| Scenario | Criminal risk | Civil/operational risk | Mitigation |
+|---|---|---|---|
+| Public pages, no auth, no PII, moderate rate | Very low | Low | Standard throttling, respectful rate limits |
+| Public pages, high volume, commercial reuse | Very low | Medium | Document lawful basis, assess database rights exposure |
+| Authenticated scraping (your own account) | Low | Medium | Review ToS for account termination risk |
+| Bypassing auth/paywalls/technical controls | **High** | High | Do not proceed without explicit legal clearance |
+| Large-scale PII collection | Low (if public) | **High** | GDPR/CCPA obligations apply; implement data minimization and deletion |
+| Scraping government, medical, financial records | Context-dependent | Context-dependent | Consult counsel; these categories attract heightened scrutiny |
 
-## Minimum Governance Checklist
+## Operational Hygiene (Do These Regardless)
 
-Before production:
-- document purpose and lawful basis
-- classify data types (PII vs non-PII)
-- define retention and deletion policy
-- apply minimization (collect only what is needed)
-- create incident response path for takedown requests
+- Rate-limit to avoid service degradation
+- Respect `robots.txt` as a signal, not a legal barrier
+- Use identifiable User-Agent with contact info when practical
+- Minimize data collection to what you actually need
+- Implement retention limits and deletion schedules
+- Do not scrape authenticated sessions you do not own without authorization
 
-## Robots and Terms
+## Actual Stop Signals
 
-- `robots.txt` is not universally binding law, but is an important policy signal.
-- explicit terms can still create contractual risk.
-- repeated evasion against explicit prohibitions increases legal exposure.
+Pause and seek legal counsel when:
+- You receive a formal cease-and-desist or court order
+- You are bypassing encryption, passwords, or other technical access controls
+- You are handling regulated categories: health data (HIPAA), financial data (GLBA), children's data (COPPA)
+- Your jurisdiction has specific anti-scraping statutes beyond general computer fraud law
 
-## Operational Ethics
+## Do Not Confuse These
 
-- avoid service degradation (rate-limit responsibly)
-- avoid sensitive/private user data unless clearly authorized
-- provide contactable user-agent identity where possible
-- do not retain unnecessary raw personal data
+- **ToS violation ≠ crime.** Most scraping disputes are civil matters or platform enforcement, not law enforcement.
+- **Public data ≠ private data.** If it loads in an incognito browser without logging in, it is generally public.
+- **Anti-bot evasion ≠ unauthorized access.** Circumventing fingerprinting and behavioral detection is a technical arms race, not a legal boundary—unless you are also bypassing authentication.
 
-## Escalation Triggers (Stop and Review)
+## Risk Assessment Workflow
 
-Stop immediately if:
-- legal notice or cease-and-desist is received
-- you detect regulated personal data at scale without approved controls
-- bypass methods require increasingly invasive circumvention
+```
+1. Is the data behind authentication or technical access control?
+   → Yes: High criminal risk. Stop unless authorized.
+   → No: Continue to 2.
 
-## Safer Alternatives
+2. Does the data contain personal information?
+   → Yes: Assess privacy regulation obligations.
+   → No: Continue to 3.
 
-- licensed datasets
-- official partner APIs
-- managed providers with compliance controls and contracts
+3. Is this high-volume commercial use?
+   → Yes: Assess civil/database rights exposure.
+   → No: Proceed with standard operational hygiene.
+```
 
-A sustainable scraping program treats legal/compliance as part of architecture, not an afterthought.
+A practical scraping operation distinguishes between real legal threats and platform discomfort. Treat the former seriously; treat the latter as an engineering problem.

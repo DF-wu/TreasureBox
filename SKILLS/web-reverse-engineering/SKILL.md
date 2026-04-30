@@ -1,16 +1,16 @@
 ---
 name: web-reverse-engineering
-description: "Universal web reverse-engineering and scraping guide for any stack (human or agent). Use when you need browser automation, API reverse engineering, anti-bot evasion, proxy strategy, CAPTCHA handling, or large-scale extraction. Covers curl_cffi/hrequests/rnet, Playwright/Patchright/Camoufox/rebrowser, Scrapy/Crawlee, Cloudflare/Akamai/DataDome/Kasada patterns, legal constraints, and production runbooks."
+description: "Universal reverse-engineering guide covering web scraping, API RE, mobile app RE (Android/iOS), JavaScript deobfuscation, protocol analysis (WebSocket/gRPC/custom TCP), and binary RE (WASM, native libraries, desktop apps). Use when you need browser automation, anti-bot evasion, proxy strategy, CAPTCHA handling, traffic interception, or large-scale extraction. Covers curl_cffi/hrequests/rnet, Playwright/Patchright/Camoufox/rebrowser/DrissionPage, Scrapy/Crawlee/Colly/Rod, Frida/objection/jadx, Ghidra/radare2, mitmproxy/Wireshark, Cloudflare/Akamai/DataDome/Kasada patterns, legal frameworks, and production runbooks."
 ---
 
 # Web Reverse Engineering (Universal)
 
-This skill is framework-agnostic. It is designed for:
+This skill covers web scraping, API reverse engineering, mobile app RE, protocol analysis, JavaScript deobfuscation, and binary reverse engineering. It is framework-agnostic and designed for:
 - human engineers
 - AI coding agents
-- Python/Node/Go automation stacks
+- Python/Node/Go/Rust automation stacks
 
-The focus is practical: choose the minimum-complexity approach that still works under target defenses.
+The focus is practical: choose the minimum-complexity approach that still works under target defenses. Escalate through layers—HTTP → Browser → Mobile → Binary—only when the layer above fails.
 
 ## Operating Principles
 
@@ -18,7 +18,7 @@ The focus is practical: choose the minimum-complexity approach that still works 
 2. Keep fingerprints consistent (UA, TLS, locale, timezone, IP geo).
 3. Prefer API extraction over DOM scraping whenever possible.
 4. Use prevention-first anti-bot strategy; CAPTCHA solving is last resort.
-5. Respect legal boundaries and platform terms.
+5. Understand legal context and risk boundaries. Platform terms are contractual signals, not criminal law.
 
 ## Fast Decision Tree
 
@@ -42,6 +42,18 @@ Target -> What is required?
 
 6) Need >100k pages/day reliability?
    -> Scrapy/Crawlee + queue + rotating proxy pool + observability.
+
+7) Target is a mobile app?
+   -> mitmproxy + Frida/objection → SSL pinning bypass → API extraction.
+
+8) JS challenge scripts are obfuscated?
+   -> Babel AST transforms → dynamic hooking → algorithm extraction.
+
+9) Protocol is WebSocket/gRPC/custom TCP?
+   -> Traffic capture → framing analysis → minimal client reproduction.
+
+10) Security logic is in native binary (.so, .exe, .wasm)?
+    -> Strings/imports scan → Ghidra/radare2 → dynamic hooking → reimplementation.
 ```
 
 ## Common Playbooks
@@ -94,15 +106,22 @@ Target -> What is required?
 - `references/data-extraction.md`
 - `references/legal-ethical.md`
 - `references/emerging-trends.md`
+- `references/tool-alternatives.md` — replacement matrix for every layer
+- `references/js-deobfuscation.md` — AST-based and dynamic analysis
+- `references/mobile-reverse-engineering.md` — Android/iOS app RE
+- `references/binary-native-reverse-engineering.md` — compiled binary analysis
+- `references/protocol-reverse-engineering.md` — WebSocket, gRPC, custom TCP/UDP
 
 ## When to Escalate vs Stop
 
 Escalate when:
 - target is business-critical
-- legal review is completed
+- you have assessed actual legal exposure (not just ToS discomfort)
 - expected value exceeds infra and maintenance cost
 
 Stop when:
-- terms explicitly prohibit your use case and legal risk is high
-- repeated bypass attempts increase operational or legal exposure
-- equivalent licensed data source exists at reasonable cost
+- you face active legal process (cease-and-desist, injunction, criminal inquiry)
+- technical barriers indicate protected/ authenticated resources you genuinely cannot access without authorization
+- equivalent licensed data source exists at lower total cost
+
+Do not treat Terms of Service as a hard stop. In most jurisdictions, public data scraping does not constitute "unauthorized access" under criminal computer fraud statutes. Contractual disputes and criminal liability are different risk categories.

@@ -56,6 +56,6 @@ Stop and reprofile traffic when:
 
 That usually means your identity layer is broken, not your solver.
 
-## Compliance Reminder
+## Context Note
 
-Challenge bypass may violate target terms in some jurisdictions or contexts. Validate legal posture before running at scale.
+Challenge solving is a standard operational technique. The legal posture depends on what data you access after solving, not the solving itself. Public data behind a challenge remains public data.

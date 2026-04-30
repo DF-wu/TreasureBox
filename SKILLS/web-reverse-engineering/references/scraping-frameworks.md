@@ -9,6 +9,12 @@ For one-off pages, scripts are enough. For sustained extraction, use a framework
 | Scrapy | Python | high-throughput crawls, mature pipelines | `pip install scrapy` | robust ecosystem, strong middleware model | steeper learning curve |
 | Crawlee/Apify SDK | Node/TS | browser-heavy + queue orchestration | `npm i crawlee` | great browser integration and request queues | JS stack required |
 | Colly | Go | lightweight high-speed crawlers | `go get github.com/gocolly/colly/v2` | fast and simple | fewer built-in anti-bot features |
+| Rod | Go | browser automation + scraping | `go get github.com/go-rod/rod` | native Go, single binary, fast | smaller ecosystem than Playwright |
+| Ferret | Go | declarative web scraping | `go get github.com/MontFerret/ferret` | FQL query language, fast | less mature than Scrapy |
+| spider (Rust) | Rust | fast, memory-safe crawling | `cargo add spider` | zero-cost abstractions, safe | smaller ecosystem |
+| PlaywrightCrawler | Node/TS | browser-based at scale | `npm i crawlee` | built on Playwright, queue managed | requires browser binary |
+| Scrapy-Redis | Python | distributed Scrapy | `pip install scrapy-redis` | horizontal scaling with Redis | adds infrastructure complexity |
+| Splash | Python | headless browser for Scrapy | `docker run scrapinghub/splash` | integrates with Scrapy middleware | slower than direct Playwright |
 
 ## Scrapy Minimal Example
 
