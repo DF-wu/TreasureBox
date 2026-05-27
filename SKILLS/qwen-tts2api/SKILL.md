@@ -1,113 +1,176 @@
 ---
 name: qwen-tts2api
-description: 操作 aahl/qwen-tts2api 容器與其 OpenAI 相容 TTS API（Qwen3 TTS）。用於部署、查詢音色、生成語音、或批次跑全部音色。49 個音色，含中日韓英西法德俄義葡及方言。
-metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"],"skills":[]}}}
+description: Deploy and operate an OpenAI-compatible TTS API backed by Qwen3-TTS via the aahl/qwen-tts2api Docker container. Use when the user mentions Qwen TTS, Qwen3 TTS, Chinese TTS, multilingual TTS, TTS deployment, voice synthesis, text-to-speech API, or needs to generate speech in Chinese (Mandarin + dialects), Japanese, Korean, English, Spanish, French, German, Russian, Italian, or Portuguese. Also use when the user asks about TTS voice catalogs, TTS container setup, or integrating a self-hosted speech API.
+metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"]}}}
 ---
 
 # qwen-tts2api
 
-以 `aahl/qwen-tts2api` Docker 容器提供 Qwen3 TTS 的 OpenAI 相容語音合成 API。
+Self-hosted OpenAI-compatible TTS API powered by **Qwen3-TTS** (Alibaba's multilingual speech model), wrapped in the community container `ghcr.io/aahl/qwen-tts2api`.
 
-上游空間：HuggingFace `qwen-qwen3-tts-demo.hf.space`，但容器走 gluetun VPN 隔離網路流量。
+The container proxies a HuggingFace Space running Qwen3-TTS, exposing it behind a standard `/v1/audio/speech` endpoint so any OpenAI SDK or curl call works without modification.
 
-## 部署位置
+## When to Use This Skill
 
-- 主機：axolotl
-- 容器名：`qwen-tts2api`
-- 網路：`--network=container:gluetun-proxy`（對外流量走 VPN）
-- 內部位址：`http://172.16.1.130:80`（gluetun-proxy 的 docker network IP）
+- Deploying or redeploying the Qwen3-TTS container
+- Querying available voices or generating speech in any supported language
+- Debugging TTS failures (upstream space sleeping, URL migration, port conflicts)
+- Integrating a self-hosted TTS endpoint into an application
 
-## 部署指令
+## Architecture
+
+```
+Client → :<PORT>/v1/audio/speech → qwen-tts2api container → HuggingFace Space (Qwen3-TTS)
+                                        ↑
+                                   gluetun VPN (optional)
+```
+
+The container uses `gradio_client` 2.x to call the upstream HF Space via websocket. All network egress can be routed through a VPN container (`--network=container:<vpn>`) to isolate traffic.
+
+## Deployment
+
+### Pull and Run
 
 ```bash
 docker pull ghcr.io/aahl/qwen-tts2api:main
-docker rm -f qwen-tts2api 2>/dev/null
-docker run -d --name qwen-tts2api \
-  --network=container:gluetun-proxy \
+
+docker run -d \
+  --name qwen-tts2api \
+  --network=container:<vpn-container-name> \  # optional, for VPN egress
   --restart=unless-stopped \
   -e BASE_URL="https://qwen-qwen3-tts-demo.hf.space" \
+  -e PORT=80 \
   ghcr.io/aahl/qwen-tts2api:main
 ```
 
-注意：原始 BASE_URL `https://qwen-qwen3-tts-demo.ms.show` 已失效（被重導向至 ModelScope SDK-only endpoint）。必須改用 HF space。
+### Environment Variables
 
-## API
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `BASE_URL` | Yes | HuggingFace Space URL for Qwen3-TTS | — |
+| `PORT` | No | Container listen port | `80` |
+
+### Critical: BASE_URL Migration
+
+The original ModelScope endpoint (`https://qwen-qwen3-tts-demo.ms.show`) has been **permanently migrated** to a ModelScope SDK-only endpoint that rejects HTTP API calls with 403. You **MUST** use the HuggingFace Space URL instead:
+
+```
+BASE_URL=https://qwen-qwen3-tts-demo.hf.space
+```
+
+If you encounter 403 from a `ms.show` domain, change `BASE_URL` and restart the container immediately.
+
+## API Reference
 
 ### GET /v1/models
 
-回傳所有可用音色。
+Returns model metadata and the full voice catalog.
 
 ```bash
-curl -s http://172.16.1.130:80/v1/models | jq '.voices | keys'
+curl -s http://<host>:<port>/v1/models
 ```
+
+Response structure:
+
+```json
+{
+  "object": "list",
+  "data": [{"id": "qwen-tts", "object": "model", "owned_by": "community"}],
+  "voices": {
+    "cherry": "Cherry / 芊悦",
+    "serena": "Serena / 苏瑶",
+    "...": "..."
+  }
+}
+```
+
+The `voices` object maps **voice ID** (use in API calls) to **display name** (character name + Chinese name).
 
 ### POST /v1/audio/speech
 
-生成語音。OpenAI 相容格式。
+Synthesize speech. OpenAI-compatible format.
 
 ```bash
-curl -s -X POST http://172.16.1.130:80/v1/audio/speech \
+curl -s -X POST http://<host>:<port>/v1/audio/speech \
   -H "Content-Type: application/json" \
-  -d '{"voice": "vivian", "input": "こんにちは"}' \
+  -d '{"voice": "vivian", "input": "你好世界"}' \
   -o output.wav
 ```
 
-參數：
-- `voice`（必填）：音色 ID。49 個可選，見 `/v1/models`
-- `input`（必填）：文本。上限約 100 字
-- `model`（選填）：固定 `qwen-tts`
+#### Parameters
 
-## 音色一覽（49）
+| Parameter | Required | Type | Description | Default |
+|-----------|----------|------|-------------|---------|
+| `voice` | Yes | string | Voice ID from `/v1/models` | — |
+| `input` | Yes | string | Text to synthesize (≤~100 chars recommended) | — |
+| `model` | No | string | Model identifier | `qwen-tts` |
 
-| 類別 | 音色 |
-|---|---|
-| 中文女聲 | cherry, serena, chelsie, momo, vivian, moon, maia, bella, jennifer, katerina, nini, stella |
-| 中文男聲 | ethan, kai, ryan, aiden, vincent, neil, elias, arthur, pip |
-| 方言／地方 | li（南京）, marcus（陕西）, roy（闽南）, peter（天津）, eric（四川）, rocky（粤语男）, kiki（粤语女）, sunny（四川女）, jada（上海）, dylan（北京） |
-| 日語 | ono anna |
-| 韓語 | sohee |
-| 英語 | nofish |
-| 西班牙語 | bodega, sonrisa（拉美） |
-| 俄語 | alek |
-| 義大利語 | dolce |
-| 德語 | lenn |
-| 法語 | emilien |
-| 葡萄牙語 | andre（歐）, radio gol（巴） |
-| 精品百人 | eldric sage, mia, mochi, bellona, bunny, ebona, seren |
+The response body is raw PCM/WAV audio (`audio/wav`).
 
-## 批次生成全部音色
+### GET /v1/audio/speech
 
-Python script 放在 `/tmp/qwen_tts_batch.py` on axolotl，使用 `concurrent.futures.ThreadPoolExecutor`、parallel=3：
+Same as POST, but parameters are passed as query string. Useful for quick browser tests.
 
-```python
-import urllib.request, json, os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-API = "http://172.16.1.130:80"
-OUTDIR = "/tmp/qwen-tts-output"
-TEXT = "要生成的中文文本"
-
-os.makedirs(OUTDIR, exist_ok=True)
-req = urllib.request.Request(f"{API}/v1/models")
-with urllib.request.urlopen(req, timeout=30) as resp:
-    voices = list(json.loads(resp.read())["voices"].keys())
-
-def gen(voice):
-    payload = json.dumps({"voice": voice, "input": TEXT}).encode()
-    req = urllib.request.Request(f"{API}/v1/audio/speech", data=payload,
-        headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        with open(f"{OUTDIR}/{voice}.wav", "wb") as f:
-            f.write(resp.read())
-    return voice
-
-with ThreadPoolExecutor(max_workers=3) as pool:
-    for f in as_completed([pool.submit(gen, v) for v in voices]):
-        print(f"OK: {f.result()}")
+```
+/v1/audio/speech?voice=vivian&input=你好
 ```
 
-## 疑難排解
+### GET /health
 
-- **500 / "Could not fetch config"** → upstream 換位址。改 `BASE_URL` 環境變數重啟容器
-- **403 from ms.show** → 該域名已遷移至 ModelScope，需 SDK token。改用 HF space
-- **容器 port 80 衝突** → gluetun-proxy 的 network namespace 內 80 已被佔用時，改用其他 port
+Health check. Returns `{"status": "ok"}` if the upstream Space is reachable.
+
+## Voice Catalog (49 voices)
+
+For the complete voice table with language tags and descriptions, read **`references/voices.md`**.
+
+### Quick Reference by Category
+
+| Category | Voice IDs |
+|----------|-----------|
+| Mandarin female | cherry, serena, chelsie, momo, vivian, moon, maia, bella, jennifer, katerina, nini, stella |
+| Mandarin male | ethan, kai, ryan, aiden, vincent, neil, elias, arthur, pip |
+| Chinese dialects | li (Nanjing), marcus (Shaanxi), roy (Minnan), peter (Tianjin), eric (Sichuan), rocky (Cantonese M), kiki (Cantonese F), sunny (Sichuan F), jada (Shanghai), dylan (Beijing) |
+| Japanese | ono anna |
+| Korean | sohee |
+| English | nofish |
+| Spanish | bodega, sonrisa (Latin Am.) |
+| Russian | alek |
+| Italian | dolce |
+| German | lenn |
+| French | emilien |
+| Portuguese | andre (EU), radio gol (BR) |
+| Premium collection | eldric sage, mia, mochi, bellona, bunny, ebona, seren |
+
+### Voice Selection Decision Tree
+
+```
+Need Chinese speech?
+  ├─ Dialect/regional flavor? → dialect voices (li, marcus, eric, kiki, etc.)
+  ├─ Standard Mandarin?
+  │   ├─ Female → cherry (sweet), serena (warm), chelsie (cool), vivian (mature)
+  │   └─ Male → ethan (steady), kai (bright), arthur (deep)
+  └─ Generic/neutral → momo, stella
+Need non-Chinese?
+  ├─ Japanese → ono anna
+  ├─ Korean → sohee
+  ├─ European language → see category table above
+  └─ Premium/distinguished → eldric sage, bellona, seren
+```
+
+## Error Handling
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| HTTP 500 + "Could not fetch config" | Upstream Space URL wrong or Space is sleeping | Verify `BASE_URL`, wait for Space to wake (may take 30–60s), or switch to HF Space URL |
+| HTTP 403 from `*.ms.show` | ModelScope endpoint migrated to SDK-only | Change `BASE_URL` to `https://qwen-qwen3-tts-demo.hf.space` and restart |
+| Empty response / 0-byte audio | Space queue full or model loading | Retry after 30s; the free-tier Space has limited capacity |
+| Port 80 already in use | Another container on the same network namespace uses 80 | Change `PORT` env var and restart |
+| "gradio_client" version conflict | Another container on same host needs gradio_client 0.x | This container uses gradio_client 2.x; run in separate network namespace or host |
+
+## NEVER
+
+- **NEVER** use the `ms.show` BASE_URL — it has been permanently retired for API access
+- **NEVER** assume the Space is always warm — free-tier HF Spaces sleep after inactivity; first request may take 30–60s
+- **NEVER** send text >200 characters — Qwen3-TTS truncates or produces garbled output beyond ~100 chars
+- **NEVER** mix this container's `gradio_client` 2.x dependency with containers requiring `gradio_client` 0.x on the same network namespace — they are incompatible
+- **NEVER** expose this service publicly without authentication — it has no built-in auth

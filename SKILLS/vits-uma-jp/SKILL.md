@@ -1,160 +1,227 @@
 ---
 name: vits-uma-jp
-description: 操作自建的 vits-uma-genshin-honkai OpenAI 相容 TTS API（原神／星穹鐵道日配限定）。65 個日配音色，含完整原神角色日配（早見沙織、悠木碧、高橋李依等）。部署、查詢音色、生成語音。
-metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"],"skills":[]}}}
+description: Deploy and operate an OpenAI-compatible TTS API wrapping the VITS-UMA Genshin/Honkai Japanese voice model (65 JP-dubbed character voices from Genshin Impact). Use when the user mentions Genshin TTS, Japanese anime TTS, VITS-UMA, 原神日配, Genshin Japanese voice, anime character speech, or needs to generate Japanese speech using character voices from Genshin Impact (Ayaka, Hutao, Raiden Shogun, Zhongli, Yae Miko, etc.). Also use for deploying the custom vits-uma-api wrapper container, debugging Gradio 3.7 websocket TTS, or integrating anime character voices into applications.
+metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"]}}}
 ---
 
 # vits-uma-jp
 
-自建 OpenAI 相容 TTS API，底層封裝 HuggingFace space `zomehwh/vits-uma-genshin-honkai`（Gradio 3.7，VITS-UMA 模型），僅取日配音色。
+Self-hosted OpenAI-compatible TTS API wrapping the **VITS-UMA** model from HuggingFace Space `zomehwh/vits-uma-genshin-honkai`, filtered to **65 Japanese-dubbed character voices** from Genshin Impact.
 
-## 部署位置
+The upstream Space runs on Gradio 3.7 with `show_api: false` — there is no REST endpoint. This wrapper uses `gradio_client` 0.x via websocket to call the model, then serves the result behind a standard `/v1/audio/speech` REST interface.
 
-- 主機：axolotl
-- 容器名：`vits-uma-api`
-- 網路：`--network=container:gluetun-proxy`（對外流量走 VPN）
-- 內部位址：`http://172.16.1.130:8080`
-- Image：`vits-uma-api:latest`（本地 build）
+## When to Use This Skill
 
-## 部署／重建
+- Deploying or redeploying the vits-uma-api container
+- Generating Japanese speech in Genshin Impact character voices
+- Querying the JP voice catalog (65 characters)
+- Debugging Gradio 3.7 websocket TTS failures
+- Choosing between this skill and qwen-tts2api (see decision tree below)
 
-Dockerfile 和 app.py 放在 axolotl 的 `/tmp/vits-uma-api/`：
+## TTS Skill Decision Tree
+
+```
+Need speech synthesis?
+├─ Japanese, anime/Genshin character voice? → THIS SKILL (vits-uma-jp)
+├─ Chinese or multilingual? → qwen-tts2api
+├─ Need specific voice acting / character tone? → THIS SKILL
+└─ Need long-form narration? → qwen-tts2api (vits-uma has ~100 char limit)
+```
+
+## Architecture
+
+```
+Client → :<PORT>/v1/audio/speech → vits-uma-api container → HF Space (Gradio 3.7 websocket)
+                                        ↑
+                                   gluetun VPN (optional)
+```
+
+The wrapper (`app.py`) maintains a persistent `gradio_client` connection to the HF Space, with TTL-based reconnection (5 minutes) to avoid stale websocket sessions.
+
+## Deployment
+
+### Build and Run
+
+The wrapper is a custom Python application. Dockerfile and `app.py` must be built locally.
 
 ```bash
-# 重建 image
-docker build -t vits-uma-api:latest /tmp/vits-uma-api
+docker build -t vits-uma-api:latest <path-to-source-dir>
 
-# 啟動
-docker rm -f vits-uma-api 2>/dev/null
-docker run -d --name vits-uma-api \
-  --network=container:gluetun-proxy \
+docker run -d \
+  --name vits-uma-api \
+  --network=container:<vpn-container-name> \  # optional, for VPN egress
   --restart=unless-stopped \
   -e HTTP_PORT=8080 \
   -e LANGUAGE=日语 \
   vits-uma-api:latest
 ```
 
-注意：此空間使用 Gradio 3.7（websocket 協議），必須用 `gradio_client<1`（0.x 版），與 qwen-tts2api 的 gradio_client 2.x 不相容。因此拆成兩個容器、兩個 port。
+### Container Source Structure
 
-## API
+```
+vits-uma-api/
+├── Dockerfile
+└── app.py          # aiohttp server + gradio_client 0.x wrapper
+```
+
+### Environment Variables
+
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `HTTP_PORT` | No | Listen port | `80` |
+| `LANGUAGE` | No | Language filter prefix sent to upstream | `日语` |
+| `BASE_URL` | No | HuggingFace Space identifier | `zomehwh/vits-uma-genshin-honkai` |
+
+### Critical: gradio_client Version Incompatibility
+
+This container **MUST** use `gradio_client<1` (0.x series). The upstream Space runs Gradio 3.7, which uses a websocket protocol incompatible with `gradio_client` 2.x. If you see errors like `"No api_name found"` or connection failures, check the installed `gradio_client` version.
+
+**Do NOT** run this container on the same Docker network namespace as `qwen-tts2api` — they require incompatible `gradio_client` versions. Use separate network namespaces or assign different ports.
+
+### Port Conflicts
+
+When sharing a network namespace with another container (e.g., via `--network=container:gluetun`), only one process can bind each port. If port 80 is already taken, use `HTTP_PORT=8080` or any available port.
+
+## API Reference
 
 ### GET /v1/models
 
-回傳 65 個日配音色。voice key 為角色名（不含「日语」前綴與聲優名）。
+Returns model metadata and the full JP voice catalog.
 
 ```bash
-curl -s http://172.16.1.130:8080/v1/models | jq '.voices | keys'
+curl -s http://<host>:<port>/v1/models
 ```
+
+Response structure:
+
+```json
+{
+  "object": "list",
+  "data": [{"id": "vits-uma-jp", "object": "model", "owned_by": "community"}],
+  "voices": {
+    "胡桃": "日语胡桃（高桥李依）",
+    "雷电将军": "日语雷电将军（泽城美雪）",
+    "...": "..."
+  }
+}
+```
+
+Voice keys are **simplified Chinese character names** (e.g., `胡桃`, `神里绫华`, `雷电将军`). The value is the full display name including the `日语` prefix and voice actor name in parentheses.
 
 ### POST /v1/audio/speech
 
-生成日文語音。
+Synthesize Japanese speech in a character's voice.
 
 ```bash
-curl -s -X POST http://172.16.1.130:8080/v1/audio/speech \
+curl -s -X POST http://<host>:<port>/v1/audio/speech \
   -H "Content-Type: application/json" \
   -d '{
     "input": "お兄ちゃん、ただいま！",
     "voice": "胡桃",
-    "speed": 1.0
-  }' -o output.wav
+    "speed": 1.0,
+    "noise_scale": 0.5
+  }' \
+  -o output.wav
 ```
 
-參數：
+#### Parameters
 
-| 參數 | 必填 | 說明 | 範圍 | 預設 |
-|---|---|---|---|---|
-| `input` | ✓ | 日文文本 | — | — |
-| `voice` | ✓ | 角色名 | 見音色表 | — |
-| `noise_scale` | | 情感起伏程度 | 0.1–1.0 | 0.6 |
-| `noise_scale_w` | | 音素發音長度 | 0.1–1.0 | 0.668 |
-| `speed` | | 語速 | 0.1–2.0 | 1.2 |
+| Parameter | Required | Type | Description | Range | Default |
+|-----------|----------|------|-------------|-------|---------|
+| `input` | Yes | string | Japanese text to synthesize | — | — |
+| `voice` | Yes | string | Character name (simplified Chinese) | See voice table | — |
+| `speed` | No | float | Speech rate. <1.0 = slower, >1.0 = faster | 0.1–2.0 | 1.2 |
+| `noise_scale` | No | float | Emotion variation. Higher = more expressive (but may be unstable) | 0.1–1.0 | 0.6 |
+| `noise_scale_w` | No | float | Phoneme duration variance. Higher = more natural rhythm variation | 0.1–1.0 | 0.668 |
 
-`GET` 也通，參數放 query string。
+#### Parameter Tuning Guide
 
-空間本身標註「結果有隨機性，可多次生成取最佳效果」——同樣的文本與參數可能產出不同語調。
+These are VITS model parameters. They control the stochastic elements of the synthesis, not deterministic settings.
 
-## 完整音色表（65）
+**For whispered/intimate tone**:
+- `noise_scale`: 0.3–0.5 (reduce emotion swing)
+- `speed`: 0.8–0.9 (slower delivery)
+- `noise_scale_w`: 0.668 (default is fine)
 
-| 角色 | Voice Key | 聲優 |
-|---|---|---|
-| 阿貝多 | `阿贝多` | 野島健児 |
-| 埃洛伊 | `埃洛伊` | 高垣彩陽 |
-| 安柏 | `安柏` | 石見舞菜香 |
-| 神里綾華 | `神里绫华` | 早見沙織 |
-| 神里綾人 | `神里绫人` | 石田彰 |
-| 白术 | `白术` | 遊佐浩二 |
-| 芭芭拉 | `芭芭拉` | 鬼頭明里 |
-| 北斗 | `北斗` | 小清水亜美 |
-| 班尼特 | `班尼特` | 逢坂良太 |
-| 坎蒂絲 | `坎蒂丝` | 柚木涼香 |
-| 重雲 | `重云` | 斉藤壮馬 |
-| 柯萊 | `柯莱` | 前川涼子 |
-| 賽諾 | `赛诺` | 入野自由 |
-| 戴因斯雷布 | `戴因斯雷布` | 津田健次郎 |
-| 迪盧克 | `迪卢克` | 小野賢章 |
-| 迪奧娜 | `迪奥娜` | 井澤詩織 |
-| 多莉 | `多莉` | 金田朋子 |
-| 優菈 | `优菈` | 佐藤利奈 |
-| 菲謝爾 | `菲谢尔` | 内田真礼 |
-| 甘雨 | `甘雨` | 上田麗奈 |
-| 鹿野院平藏 | `鹿野院平藏` | 井口祐一 |
-| 空 | `空` | 堀江瞬 |
-| 蛍 | `荧` | 悠木碧 |
-| 胡桃 | `胡桃` | 高橋李依 |
-| 一斗 | `一斗` | 西川貴教 |
-| 凱亞 | `凯亚` | 鳥海浩輔 |
-| 万葉 | `万叶` | 島崎信長 |
-| 刻晴 | `刻晴` | 喜多村英梨 |
-| 可莉 | `可莉` | 久野美咲 |
-| 心海 | `心海` | 三森鈴子 |
-| 九条裟羅 | `九条裟罗` | 瀬戸麻沙美 |
-| 麗莎 | `丽莎` | 田中理恵 |
-| 莫娜 | `莫娜` | 小原好美 |
-| 納西妲 | `纳西妲` | 田村由加莉 |
-| 妮露 | `妮露` | 金元寿子 |
-| 凝光 | `凝光` | 大原沙耶香 |
-| 諾艾爾 | `诺艾尔` | 高尾奏音 |
-| 奥茲 | `奥兹` | 増谷康紀 |
-| 派蒙 | `派蒙` | 古賀葵 |
-| 琴 | `琴` | 斎藤千和 |
-| 七七 | `七七` | 田村由加莉 |
-| 雷電将軍 | `雷电将军` | 沢城美雪 |
-| 雷澤 | `雷泽` | 内山昂輝 |
-| 羅莎莉亞 | `罗莎莉亚` | 加隈亜衣 |
-| 早柚 | `早柚` | 洲崎綾 |
-| 散兵 | `散兵` | 柿原徹也 |
-| 申鶴 | `申鹤` | 川澄綾子 |
-| 久岐忍 | `久岐忍` | 水橋香織 |
-| 女士 | `女士` | 庄子裕衣 |
-| 砂糖 | `砂糖` | 藤田茜 |
-| 達達利亞 | `达达利亚` | 木村良平 |
-| 托馬 | `托马` | 森田成一 |
-| 提納里 | `提纳里` | 小林沙苗 |
-| 温迪 | `温迪` | 村瀬歩 |
-| 香菱 | `香菱` | 小澤亜李 |
-| 魈 | `魈` | 松岡禎丞 |
-| 行秋 | `行秋` | 皆川純子 |
-| 辛焱 | `辛焱` | 高橋智秋 |
-| 八重神子 | `八重神子` | 佐倉綾音 |
-| 煙緋 | `烟绯` | 花守由美里 |
-| 夜蘭 | `夜兰` | 遠藤綾 |
-| 宵宮 | `宵宫` | 植田佳奈 |
-| 雲菫 | `云堇` | 小岩井小鳥 |
-| 鍾離 | `钟离` | 前野智昭 |
-| （旁白/通用）| `未知` | 畠中祐 |
+**For dramatic/expressive tone**:
+- `noise_scale`: 0.7–0.9 (wider emotion range)
+- `speed`: 1.0–1.2 (natural to slightly fast)
+- `noise_scale_w`: 0.7–0.8 (more rhythmic variation)
 
-## 技術細節
+**For stable/consistent output** (minimize randomness):
+- `noise_scale`: 0.3 (near-deterministic)
+- `noise_scale_w`: 0.3 (uniform phoneme length)
+- `speed`: 1.0
 
-- 上游 HF space 使用 Gradio 3.7，`show_api: false`，無 REST endpoint
-- 只能用 `gradio_client` 0.x 透過 websocket 呼叫
-- wrapper 內用 `asyncio.to_thread()` + threading.Lock 序列化請求
-- 免費 CPU space，每次生成約 1–3 秒
-- gradio_client 會將音檔下載到 local temp dir，wrapper 讀取後以 `audio/wav` 回傳
+**Important**: The upstream Space documentation states that results have inherent randomness — identical parameters may produce different intonations across calls. For best results, generate 2–3 times and select the preferred output.
 
-## 疑難排解
+### GET /v1/audio/speech
 
-- **health 回 0 voices** → container 剛啟動，`init_voices` 還在連 HF 拉 config。等 10–15 秒
-- **HTTP 500** → 查看 `docker logs vits-uma-api`。通常是 upstream space sleeping/排隊中
-- **Unknown voice** → voice key 用簡體中文角色名。完整清單：`GET /v1/models`
-- **port 8080 衝突** → 改 `HTTP_PORT` 環境變數
+Same as POST but parameters are query strings.
+
+```
+/v1/audio/speech?input=こんにちは&voice=胡桃&speed=1.0
+```
+
+### GET /health
+
+Returns `{"status": "ok", "voices": <count>}`. A `voices` count of 0 means the startup voice initialization has not completed yet.
+
+## Voice Catalog
+
+For the complete voice table with voice actor names and notes, read **`references/voices.md`**.
+
+### Quick Reference: Popular Characters
+
+| Character | Voice Key | Voice Actor | Voice Type |
+|-----------|-----------|-------------|------------|
+| Kamisato Ayaka | `神里绫华` | Hayami Saori | Elegant, gentle |
+| Hutao | `胡桃` | Takahashi Rie | Playful, bright |
+| Raiden Shogun | `雷电将军` | Sawashiro Miyuki | Noble, commanding |
+| Zhongli | `钟离` | Maeno Tomoaki | Deep, composed |
+| Yae Miko | `八重神子` | Sakura Ayane | Sly, teasing |
+| Ganyu | `甘雨` | Ueda Reina | Soft, earnest |
+| Kaedehara Kazuha | `万叶` | Shimazaki Nobunaga | Calm, poetic |
+| Yoimiya | `宵宫` | Ueda Kana | Cheerful, energetic |
+| Sangonomiya Kokomi | `心海` | Mimori Suzuko | Serene, strategic |
+| Kamisato Ayato | `神里绫人` | Ishida Akira | Refined, calculating |
+| Nahida | `纳西妲` | Tamura Yukari | Childlike, wise |
+| Shenhe | `申鹤` | Kawasumi Ayako | Aloof, restrained |
+| Ei/Beelzebul | (use `雷电将军`) | — | — |
+| Lumine | `荧` | Yuuki Aoi | Determined, bright |
+| Aether | `空` | Horie Shun | Steady, warm |
+
+### Voice Key Convention
+
+Voice keys use **simplified Chinese** character names as they appear in the upstream model config. Some common mappings:
+
+| Japanese Name | Voice Key |
+|---------------|-----------|
+| フータオ | `胡桃` |
+| 雷電将軍 | `雷电将军` |
+| 神里綾華 | `神里绫华` |
+| 鍾離 | `钟离` |
+| 八重神子 | `八重神子` |
+
+If a voice key is not found, the API attempts partial matching against the full display name. If all else fails, check `/v1/models` for the exact key.
+
+## Error Handling
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `health` returns `voices: 0` | Startup voice init still loading from HF | Wait 10–15 seconds and retry |
+| HTTP 500 | Upstream Space sleeping or queue full | Wait 30–60s for Space to wake; free-tier Spaces have limited capacity |
+| `Unknown voice` | Voice key mismatch | Query `/v1/models` for exact keys; remember keys are simplified Chinese |
+| `TypeError: object NoneType can't be used in 'await'` | aiohttp startup hook incompatibility with Python 3.13 | Ensure `app.on_startup` callbacks are async functions returning None |
+| Port conflict | Another container on same network namespace uses that port | Change `HTTP_PORT` and restart |
+| `gradio_client` connection errors | Wrong `gradio_client` version | Must use `gradio_client<1` (0.x); 2.x is incompatible with Gradio 3.7 |
+
+## NEVER
+
+- **NEVER** use `gradio_client>=1` with this container — Gradio 3.7 websocket protocol is incompatible
+- **NEVER** co-locate this container with `qwen-tts2api` on the same Docker network namespace — they require conflicting `gradio_client` versions
+- **NEVER** send non-Japanese text to this API — the VITS-UMA model is Japanese-only; Chinese/English input will produce garbled output
+- **NEVER** set `noise_scale` above 0.9 — the model produces unstable/glitchy audio beyond this threshold
+- **NEVER** assume deterministic output — VITS is a stochastic model; same input may yield different intonation across calls
+- **NEVER** rely on this for real-time streaming — the websocket round-trip adds 1–3s latency per request
+- **NEVER** hardcode the voice key from memory — always verify against `/v1/models` if unsure, as upstream model updates may add or rename voices
