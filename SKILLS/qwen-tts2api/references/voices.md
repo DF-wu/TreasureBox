@@ -93,10 +93,10 @@ Complete reference for all 49 voices in the Qwen3-TTS model.
 
 ## Voice Selection Tips
 
-- For **narration/audiobook**: moon, vincent, eldric sage
-- For **customer service**: serena, ethan, stella
-- For **casual/conversational**: momo, kai, nini
-- For **whisper/intimate**: cherry, vivian, maia — lower the `speed` parameter (0.8–0.9) for a softer feel
-- For **regional authenticity**: use dialect voices; note that dialect voices may produce Mandarin with regional accent rather than pure dialect
-- For **non-Chinese languages**: only one voice per language is available; quality varies
-- Premium voices (eldric sage, bellona, etc.) tend to have richer timbre but may be less natural for conversational text
+- **Narration/audiobook**: moon, vincent, eldric sage
+- **Customer service**: serena, ethan, stella
+- **Casual/conversational**: momo, kai, nini
+- **Whisper/intimate**: cherry, vivian, maia — lower speed (0.8–0.9) for softer feel
+- **Regional authenticity**: dialect voices; note these produce Mandarin with regional accent, not pure dialect
+- **Non-Chinese**: only one voice per language; quality varies
+- Premium voices tend to have richer timbre but may be less natural for conversational text

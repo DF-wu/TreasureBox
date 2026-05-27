@@ -1,66 +1,71 @@
 ---
 name: qwen-tts2api
-description: Deploy and operate an OpenAI-compatible TTS API backed by Qwen3-TTS via the aahl/qwen-tts2api Docker container. Use when the user mentions Qwen TTS, Qwen3 TTS, Chinese TTS, multilingual TTS, TTS deployment, voice synthesis, text-to-speech API, or needs to generate speech in Chinese (Mandarin + dialects), Japanese, Korean, English, Spanish, French, German, Russian, Italian, or Portuguese. Also use when the user asks about TTS voice catalogs, TTS container setup, or integrating a self-hosted speech API.
+description: Reverse-engineered API reference for Qwen3-TTS (Alibaba's multilingual TTS) served via the aahl/qwen-tts2api OpenAI-compatible wrapper. Use when the user mentions Qwen TTS, Qwen3 TTS, Chinese TTS, multilingual TTS, voice synthesis, text-to-speech, TTS voice catalog, or needs to generate speech in Chinese (Mandarin + dialects), Japanese, Korean, English, Spanish, French, German, Russian, Italian, or Portuguese. Also use when debugging Qwen3-TTS upstream issues, HF Space migration, or integrating a self-hosted Qwen TTS endpoint.
 metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"]}}}
 ---
 
 # qwen-tts2api
 
-Self-hosted OpenAI-compatible TTS API powered by **Qwen3-TTS** (Alibaba's multilingual speech model), wrapped in the community container `ghcr.io/aahl/qwen-tts2api`.
+OpenAI-compatible TTS API reverse-engineered from **Qwen3-TTS** (Alibaba's multilingual speech model) via the community wrapper `ghcr.io/aahl/qwen-tts2api`.
 
-The container proxies a HuggingFace Space running Qwen3-TTS, exposing it behind a standard `/v1/audio/speech` endpoint so any OpenAI SDK or curl call works without modification.
+## What This Skill Covers
 
-## When to Use This Skill
+The Qwen3-TTS model lives behind a HuggingFace Space with no public REST endpoint. The `aahl/qwen-tts2api` container reverse-engineers the Space's Gradio websocket interface and exposes it as a standard `/v1/audio/speech` REST API — identical to OpenAI's TTS endpoint, so any OpenAI SDK works without modification.
 
-- Deploying or redeploying the Qwen3-TTS container
-- Querying available voices or generating speech in any supported language
-- Debugging TTS failures (upstream space sleeping, URL migration, port conflicts)
-- Integrating a self-hosted TTS endpoint into an application
+This skill documents:
+- The resulting API contract (endpoints, parameters, response format)
+- The upstream architecture and how it was reverse-engineered
+- The 49-voice catalog with language/dialect/character classification
+- Failure modes inherent to the upstream (Space sleeping, URL migration, queue limits)
+- Parameter tuning for specific speech effects
 
-## Architecture
+## Upstream Reverse Engineering
 
-```
-Client → :<PORT>/v1/audio/speech → qwen-tts2api container → HuggingFace Space (Qwen3-TTS)
-                                        ↑
-                                   gluetun VPN (optional)
-```
+### Source
 
-The container uses `gradio_client` 2.x to call the upstream HF Space via websocket. All network egress can be routed through a VPN container (`--network=container:<vpn>`) to isolate traffic.
+The Qwen3-TTS model is hosted at a HuggingFace Space:
 
-## Deployment
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| `https://qwen-qwen3-tts-demo.hf.space` | Active | Current working URL |
+| `https://qwen-qwen3-tts-demo.ms.show` | **DEAD** | ModelScope migrated to SDK-only; HTTP API calls return 403 |
 
-### Pull and Run
+The Space runs Gradio with a websocket-based API. The wrapper uses `gradio_client` 2.x to connect via websocket, call the model's inference function, download the resulting audio file, and serve it as a WAV response.
 
-```bash
-docker pull ghcr.io/aahl/qwen-tts2api:main
-
-docker run -d \
-  --name qwen-tts2api \
-  --network=container:<vpn-container-name> \  # optional, for VPN egress
-  --restart=unless-stopped \
-  -e BASE_URL="https://qwen-qwen3-tts-demo.hf.space" \
-  -e PORT=80 \
-  ghcr.io/aahl/qwen-tts2api:main
-```
-
-### Environment Variables
-
-| Variable | Required | Description | Default |
-|----------|----------|-------------|---------|
-| `BASE_URL` | Yes | HuggingFace Space URL for Qwen3-TTS | — |
-| `PORT` | No | Container listen port | `80` |
-
-### Critical: BASE_URL Migration
-
-The original ModelScope endpoint (`https://qwen-qwen3-tts-demo.ms.show`) has been **permanently migrated** to a ModelScope SDK-only endpoint that rejects HTTP API calls with 403. You **MUST** use the HuggingFace Space URL instead:
+### How the Wrapper Works
 
 ```
-BASE_URL=https://qwen-qwen3-tts-demo.hf.space
+Client ──HTTP──→ qwen-tts2api ──websocket──→ HF Space (Qwen3-TTS)
+                                       │
+                                  gradio_client 2.x
+                                  calls predict() with:
+                                    - text (input)
+                                    - voice_id (from /v1/models cache)
+                                  downloads output audio file
+                                  returns audio/wav
 ```
 
-If you encounter 403 from a `ms.show` domain, change `BASE_URL` and restart the container immediately.
+The wrapper caches the voice catalog on startup by querying the Space's config. It translates OpenAI-format requests into Gradio websocket calls internally.
 
-## API Reference
+### Critical Upstream Behaviors
+
+1. **Space cold start**: Free-tier HF Spaces sleep after ~48h of inactivity. First request after wake takes 30–60s while the model loads into GPU. Subsequent requests are fast (~2–5s).
+
+2. **URL migration**: The original ModelScope endpoint (`*.ms.show`) has been **permanently retired** for HTTP access. It now requires an SDK token. Always use the HF Space URL.
+
+3. **Queue limits**: Free-tier Spaces have a request queue. Under load, requests may time out or return empty responses. No rate limit documentation exists; empirical limit is ~3 concurrent requests.
+
+4. **Text length**: Qwen3-TTS produces best results under ~100 characters. Beyond ~200 characters, output quality degrades (truncation, garbling, or empty audio).
+
+## API Contract
+
+### Base URL
+
+```
+http://<host>:<port>
+```
+
+The container listens on the port specified by the `PORT` environment variable (default `80`).
 
 ### GET /v1/models
 
@@ -70,7 +75,7 @@ Returns model metadata and the full voice catalog.
 curl -s http://<host>:<port>/v1/models
 ```
 
-Response structure:
+Response:
 
 ```json
 {
@@ -84,11 +89,11 @@ Response structure:
 }
 ```
 
-The `voices` object maps **voice ID** (use in API calls) to **display name** (character name + Chinese name).
+The `voices` object maps **voice ID** to **display name**. Voice ID is what you pass in API calls.
 
 ### POST /v1/audio/speech
 
-Synthesize speech. OpenAI-compatible format.
+Synthesize speech. OpenAI-compatible.
 
 ```bash
 curl -s -X POST http://<host>:<port>/v1/audio/speech \
@@ -102,14 +107,14 @@ curl -s -X POST http://<host>:<port>/v1/audio/speech \
 | Parameter | Required | Type | Description | Default |
 |-----------|----------|------|-------------|---------|
 | `voice` | Yes | string | Voice ID from `/v1/models` | — |
-| `input` | Yes | string | Text to synthesize (≤~100 chars recommended) | — |
-| `model` | No | string | Model identifier | `qwen-tts` |
+| `input` | Yes | string | Text to synthesize (≤100 chars recommended) | — |
+| `model` | No | string | Ignored; always `qwen-tts` | `qwen-tts` |
 
-The response body is raw PCM/WAV audio (`audio/wav`).
+Unlike OpenAI's TTS API, there is **no `response_format`**, **no `speed`**, and **no `stream`** parameter. The response is always a complete WAV file (`audio/wav`).
 
 ### GET /v1/audio/speech
 
-Same as POST, but parameters are passed as query string. Useful for quick browser tests.
+Query-string variant of POST.
 
 ```
 /v1/audio/speech?voice=vivian&input=你好
@@ -117,13 +122,13 @@ Same as POST, but parameters are passed as query string. Useful for quick browse
 
 ### GET /health
 
-Health check. Returns `{"status": "ok"}` if the upstream Space is reachable.
+Returns `{"status": "ok"}` if the upstream Space is reachable. Use this to detect Space sleeping before attempting synthesis.
 
-## Voice Catalog (49 voices)
+## Voice Catalog
 
-For the complete voice table with language tags and descriptions, read **`references/voices.md`**.
+For the complete voice table with language tags, character descriptions, and selection tips, read **`references/voices.md`**.
 
-### Quick Reference by Category
+### Voice Categories (49 total)
 
 | Category | Voice IDs |
 |----------|-----------|
@@ -139,38 +144,56 @@ For the complete voice table with language tags and descriptions, read **`refere
 | German | lenn |
 | French | emilien |
 | Portuguese | andre (EU), radio gol (BR) |
-| Premium collection | eldric sage, mia, mochi, bellona, bunny, ebona, seren |
+| Premium | eldric sage, mia, mochi, bellona, bunny, ebona, seren |
 
 ### Voice Selection Decision Tree
 
 ```
 Need Chinese speech?
-  ├─ Dialect/regional flavor? → dialect voices (li, marcus, eric, kiki, etc.)
+  ├─ Dialect/regional? → dialect voices (li, marcus, eric, kiki...)
   ├─ Standard Mandarin?
   │   ├─ Female → cherry (sweet), serena (warm), chelsie (cool), vivian (mature)
   │   └─ Male → ethan (steady), kai (bright), arthur (deep)
-  └─ Generic/neutral → momo, stella
+  └─ Generic → momo, stella
 Need non-Chinese?
   ├─ Japanese → ono anna
   ├─ Korean → sohee
-  ├─ European language → see category table above
+  ├─ European → see category table
   └─ Premium/distinguished → eldric sage, bellona, seren
 ```
 
-## Error Handling
+## Deployment from Scratch
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| HTTP 500 + "Could not fetch config" | Upstream Space URL wrong or Space is sleeping | Verify `BASE_URL`, wait for Space to wake (may take 30–60s), or switch to HF Space URL |
-| HTTP 403 from `*.ms.show` | ModelScope endpoint migrated to SDK-only | Change `BASE_URL` to `https://qwen-qwen3-tts-demo.hf.space` and restart |
-| Empty response / 0-byte audio | Space queue full or model loading | Retry after 30s; the free-tier Space has limited capacity |
-| Port 80 already in use | Another container on the same network namespace uses 80 | Change `PORT` env var and restart |
-| "gradio_client" version conflict | Another container on same host needs gradio_client 0.x | This container uses gradio_client 2.x; run in separate network namespace or host |
+If the container is not already running, deploy it with:
+
+```bash
+docker pull ghcr.io/aahl/qwen-tts2api:main
+docker run -d --name qwen-tts2api \
+  --restart=unless-stopped \
+  -e BASE_URL="https://qwen-qwen3-tts-demo.hf.space" \
+  -e PORT=80 \
+  ghcr.io/aahl/qwen-tts2api:main
+```
+
+Network options:
+- **Direct egress**: default Docker networking
+- **VPN isolation**: `--network=container:<vpn-container-name>` — all outbound traffic routes through the VPN container's network namespace. Port conflicts may arise if the VPN namespace already has a service on port 80; change `PORT` to resolve.
+
+The container requires `gradio_client>=2` (bundled in the image). It is incompatible with containers that need `gradio_client<1` — run them on separate network namespaces.
+
+## Error Matrix
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| HTTP 500 + "Could not fetch config" | Upstream Space URL wrong or Space sleeping | Verify `BASE_URL`, wait 30–60s for Space to wake |
+| HTTP 403 from `*.ms.show` | ModelScope endpoint retired for API use | Change `BASE_URL` to `https://qwen-qwen3-tts-demo.hf.space`, restart container |
+| 0-byte / empty audio | Space queue full or model still loading | Retry after 30s; free-tier Spaces have limited capacity |
+| Port bind failure | Another service on same network namespace uses that port | Change `PORT` env var |
 
 ## NEVER
 
-- **NEVER** use the `ms.show` BASE_URL — it has been permanently retired for API access
-- **NEVER** assume the Space is always warm — free-tier HF Spaces sleep after inactivity; first request may take 30–60s
-- **NEVER** send text >200 characters — Qwen3-TTS truncates or produces garbled output beyond ~100 chars
-- **NEVER** mix this container's `gradio_client` 2.x dependency with containers requiring `gradio_client` 0.x on the same network namespace — they are incompatible
-- **NEVER** expose this service publicly without authentication — it has no built-in auth
+- **NEVER** use `*.ms.show` as BASE_URL — permanently retired, returns 403 for HTTP
+- **NEVER** send text >200 chars — Qwen3-TTS truncates or garbles beyond ~100 chars
+- **NEVER** assume the Space is always warm — first request after sleep takes 30–60s
+- **NEVER** co-locate with gradio_client<1 containers on the same network namespace — version conflict
+- **NEVER** expect `speed`, `stream`, or `response_format` parameters — this wrapper does not implement them

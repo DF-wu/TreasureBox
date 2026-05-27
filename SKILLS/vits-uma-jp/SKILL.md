@@ -1,88 +1,104 @@
 ---
 name: vits-uma-jp
-description: Deploy and operate an OpenAI-compatible TTS API wrapping the VITS-UMA Genshin/Honkai Japanese voice model (65 JP-dubbed character voices from Genshin Impact). Use when the user mentions Genshin TTS, Japanese anime TTS, VITS-UMA, 原神日配, Genshin Japanese voice, anime character speech, or needs to generate Japanese speech using character voices from Genshin Impact (Ayaka, Hutao, Raiden Shogun, Zhongli, Yae Miko, etc.). Also use for deploying the custom vits-uma-api wrapper container, debugging Gradio 3.7 websocket TTS, or integrating anime character voices into applications.
+description: Reverse-engineered API reference for VITS-UMA Genshin Impact Japanese voice TTS (65 JP-dubbed character voices), served via a custom OpenAI-compatible wrapper over the Gradio 3.7 websocket interface. Use when the user mentions Genshin TTS, VITS-UMA, 原神日配, anime TTS, Japanese character voice synthesis, or needs to generate Japanese speech using Genshin Impact character voices (Ayaka, Hutao, Raiden Shogun, Zhongli, Yae Miko, etc.). Also use for reverse-engineering Gradio 3.7 Spaces, debugging websocket-based TTS, or integrating anime character voices into applications.
 metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"]}}}
 ---
 
 # vits-uma-jp
 
-Self-hosted OpenAI-compatible TTS API wrapping the **VITS-UMA** model from HuggingFace Space `zomehwh/vits-uma-genshin-honkai`, filtered to **65 Japanese-dubbed character voices** from Genshin Impact.
+OpenAI-compatible TTS API reverse-engineered from **VITS-UMA** (Genshin Impact / Honkai: Star Rail Japanese voice model) hosted at HuggingFace Space `zomehwh/vits-uma-genshin-honkai`.
 
-The upstream Space runs on Gradio 3.7 with `show_api: false` — there is no REST endpoint. This wrapper uses `gradio_client` 0.x via websocket to call the model, then serves the result behind a standard `/v1/audio/speech` REST interface.
+This skill documents the full reverse-engineering process, the resulting API contract, the 65 JP voice catalog, and parameter tuning — everything needed to recreate the wrapper from scratch without depending on any pre-built artifact.
 
-## When to Use This Skill
+## What This Skill Covers
 
-- Deploying or redeploying the vits-uma-api container
-- Generating Japanese speech in Genshin Impact character voices
-- Querying the JP voice catalog (65 characters)
-- Debugging Gradio 3.7 websocket TTS failures
-- Choosing between this skill and qwen-tts2api (see decision tree below)
+The VITS-UMA model lives behind a Gradio 3.7 Space with **no REST endpoint** (`show_api: false`). This skill documents:
+- The reverse engineering of the Gradio 3.7 websocket protocol
+- The resulting OpenAI-compatible API contract
+- The custom wrapper design (aiohttp + gradio_client 0.x)
+- The 65-voice JP catalog with voice actor attribution
+- VITS parameter tuning for specific speech effects
+- Failure modes inherent to the upstream Space
 
 ## TTS Skill Decision Tree
 
 ```
 Need speech synthesis?
-├─ Japanese, anime/Genshin character voice? → THIS SKILL (vits-uma-jp)
+├─ Japanese, anime/Genshin character voice? → THIS SKILL
 ├─ Chinese or multilingual? → qwen-tts2api
 ├─ Need specific voice acting / character tone? → THIS SKILL
-└─ Need long-form narration? → qwen-tts2api (vits-uma has ~100 char limit)
+└─ Need long-form narration (>100 chars)? → qwen-tts2api (VITS-UMA has ~100 char limit)
 ```
 
-## Architecture
+## Upstream Reverse Engineering
 
-```
-Client → :<PORT>/v1/audio/speech → vits-uma-api container → HF Space (Gradio 3.7 websocket)
-                                        ↑
-                                   gluetun VPN (optional)
-```
+### Source Space
 
-The wrapper (`app.py`) maintains a persistent `gradio_client` connection to the HF Space, with TTL-based reconnection (5 minutes) to avoid stale websocket sessions.
+`zomehwh/vits-uma-genshin-honkai` on HuggingFace.
 
-## Deployment
+The Space exposes a Gradio 3.7 interface with:
+- **Input**: text (string), language (dropdown: 日语/英语/...), character (dropdown filtered by language), noise_scale, noise_scale_w, speed
+- **Output**: audio file (filepath)
+- **Protocol**: Gradio 3.7 websocket only — `show_api: false` means no `/api/` REST routes exist
 
-### Build and Run
+### Why a Wrapper Is Needed
 
-The wrapper is a custom Python application. Dockerfile and `app.py` must be built locally.
+Gradio 3.7 spaces with `show_api: false` cannot be called via HTTP. The only access path is through `gradio_client`'s websocket protocol, which:
 
-```bash
-docker build -t vits-uma-api:latest <path-to-source-dir>
+1. Opens a persistent websocket to the Space
+2. Sends a predict call with the function's `api_name`
+3. Receives the result (audio filepath) via the same websocket
+4. Downloads the audio file from the Space's file server
 
-docker run -d \
-  --name vits-uma-api \
-  --network=container:<vpn-container-name> \  # optional, for VPN egress
-  --restart=unless-stopped \
-  -e HTTP_PORT=8080 \
-  -e LANGUAGE=日语 \
-  vits-uma-api:latest
-```
+This means a raw `curl` or HTTP client **cannot** call the Space directly. The wrapper bridges this by:
+- Accepting standard OpenAI-format HTTP requests
+- Translating them to `gradio_client` websocket calls internally
+- Returning the audio as a standard HTTP response
 
-### Container Source Structure
+### Critical Gradio 3.7 Constraint: gradio_client Version
 
-```
-vits-uma-api/
-├── Dockerfile
-└── app.py          # aiohttp server + gradio_client 0.x wrapper
-```
+| gradio_client | Gradio 3.7 compatibility | Use with |
+|---------------|--------------------------|----------|
+| `0.x` (<1.0) | **Compatible** — websocket protocol matches | THIS wrapper |
+| `2.x` (>=2.0) | **Incompatible** — different serialization format | qwen-tts2api |
 
-### Environment Variables
+The two versions use fundamentally different websocket protocols. They **cannot** coexist in the same Python environment or on the same Docker network namespace sharing a single pip install.
 
-| Variable | Required | Description | Default |
-|----------|----------|-------------|---------|
-| `HTTP_PORT` | No | Listen port | `80` |
-| `LANGUAGE` | No | Language filter prefix sent to upstream | `日语` |
-| `BASE_URL` | No | HuggingFace Space identifier | `zomehwh/vits-uma-genshin-honkai` |
+If you see errors like `"No api_name found"`, `"Unexpected message type"`, or websocket connection failures, check `gradio_client` version first.
 
-### Critical: gradio_client Version Incompatibility
+### Reverse Engineering Steps
 
-This container **MUST** use `gradio_client<1` (0.x series). The upstream Space runs Gradio 3.7, which uses a websocket protocol incompatible with `gradio_client` 2.x. If you see errors like `"No api_name found"` or connection failures, check the installed `gradio_client` version.
+To replicate this from scratch against any Gradio 3.7 Space:
 
-**Do NOT** run this container on the same Docker network namespace as `qwen-tts2api` — they require incompatible `gradio_client` versions. Use separate network namespaces or assign different ports.
+1. **Identify the Space URL**: `zomehwh/vits-uma-genshin-honkai`
+2. **Probe with gradio_client**:
+   ```python
+   from gradio_client import Client
+   client = Client("zomehwh/vits-uma-genshin-honkai")
+   # This connects via websocket and downloads the Space's config
+   ```
+3. **Extract voice list from config**: The Space's `config.json` contains all dropdown options. Filter by the `日语` prefix to get JP-only voices.
+4. **Identify the predict function**: Call `client.view_api()` to discover the function name and parameter signature.
+5. **Call the function**:
+   ```python
+   result = client.predict(
+       text="こんにちは",
+       language="日语",
+       character="日语胡桃（高桥李依）",
+       noise_scale=0.6,
+       noise_scale_w=0.668,
+       speed=1.2,
+       api_name="/predict"
+   )
+   # result = path to downloaded audio file
+   ```
+6. **Wrap in an HTTP server**: Accept OpenAI-format requests, translate to the above call, return the audio file.
 
-### Port Conflicts
+### Stochastic Nature of VITS
 
-When sharing a network namespace with another container (e.g., via `--network=container:gluetun`), only one process can bind each port. If port 80 is already taken, use `HTTP_PORT=8080` or any available port.
+The upstream Space documentation states: "结果具有随机性，相同参数可能产生不同语调". This is inherent to the VITS model architecture — the `noise_scale` parameters control the variance of the latent sampling. Identical inputs produce **different intonations** across calls. For best results, generate 2–3 times and select the preferred output.
 
-## API Reference
+## API Contract
 
 ### GET /v1/models
 
@@ -92,7 +108,7 @@ Returns model metadata and the full JP voice catalog.
 curl -s http://<host>:<port>/v1/models
 ```
 
-Response structure:
+Response:
 
 ```json
 {
@@ -106,11 +122,11 @@ Response structure:
 }
 ```
 
-Voice keys are **simplified Chinese character names** (e.g., `胡桃`, `神里绫华`, `雷电将军`). The value is the full display name including the `日语` prefix and voice actor name in parentheses.
+Voice keys are **simplified Chinese character names**. Values include the `日语` prefix and voice actor name.
 
 ### POST /v1/audio/speech
 
-Synthesize Japanese speech in a character's voice.
+Synthesize Japanese speech.
 
 ```bash
 curl -s -X POST http://<host>:<port>/v1/audio/speech \
@@ -129,35 +145,14 @@ curl -s -X POST http://<host>:<port>/v1/audio/speech \
 | Parameter | Required | Type | Description | Range | Default |
 |-----------|----------|------|-------------|-------|---------|
 | `input` | Yes | string | Japanese text to synthesize | — | — |
-| `voice` | Yes | string | Character name (simplified Chinese) | See voice table | — |
-| `speed` | No | float | Speech rate. <1.0 = slower, >1.0 = faster | 0.1–2.0 | 1.2 |
-| `noise_scale` | No | float | Emotion variation. Higher = more expressive (but may be unstable) | 0.1–1.0 | 0.6 |
-| `noise_scale_w` | No | float | Phoneme duration variance. Higher = more natural rhythm variation | 0.1–1.0 | 0.668 |
-
-#### Parameter Tuning Guide
-
-These are VITS model parameters. They control the stochastic elements of the synthesis, not deterministic settings.
-
-**For whispered/intimate tone**:
-- `noise_scale`: 0.3–0.5 (reduce emotion swing)
-- `speed`: 0.8–0.9 (slower delivery)
-- `noise_scale_w`: 0.668 (default is fine)
-
-**For dramatic/expressive tone**:
-- `noise_scale`: 0.7–0.9 (wider emotion range)
-- `speed`: 1.0–1.2 (natural to slightly fast)
-- `noise_scale_w`: 0.7–0.8 (more rhythmic variation)
-
-**For stable/consistent output** (minimize randomness):
-- `noise_scale`: 0.3 (near-deterministic)
-- `noise_scale_w`: 0.3 (uniform phoneme length)
-- `speed`: 1.0
-
-**Important**: The upstream Space documentation states that results have inherent randomness — identical parameters may produce different intonations across calls. For best results, generate 2–3 times and select the preferred output.
+| `voice` | Yes | string | Character name (simplified Chinese key) | See voice table | — |
+| `speed` | No | float | Speech rate multiplier | 0.1–2.0 | 1.2 |
+| `noise_scale` | No | float | Emotion/expressiveness variance | 0.1–1.0 | 0.6 |
+| `noise_scale_w` | No | float | Phoneme duration variance | 0.1–1.0 | 0.668 |
 
 ### GET /v1/audio/speech
 
-Same as POST but parameters are query strings.
+Query-string variant.
 
 ```
 /v1/audio/speech?input=こんにちは&voice=胡桃&speed=1.0
@@ -165,13 +160,62 @@ Same as POST but parameters are query strings.
 
 ### GET /health
 
-Returns `{"status": "ok", "voices": <count>}`. A `voices` count of 0 means the startup voice initialization has not completed yet.
+Returns `{"status": "ok", "voices": <count>}`. Voices count of 0 means startup initialization is still loading.
+
+## Parameter Tuning Guide
+
+These are VITS stochastic parameters — they control the variance of the model's latent sampling, not deterministic settings.
+
+### For Whispered/Intimate Tone
+
+```json
+{
+  "noise_scale": 0.3,
+  "noise_scale_w": 0.668,
+  "speed": 0.85
+}
+```
+
+Low `noise_scale` constrains emotion variance → flatter, quieter intonation. Slow `speed` stretches the delivery. `noise_scale_w` at default keeps natural rhythm.
+
+### For Dramatic/Expressive Tone
+
+```json
+{
+  "noise_scale": 0.8,
+  "noise_scale_w": 0.75,
+  "speed": 1.1
+}
+```
+
+High `noise_scale` allows wider emotion swings. Elevated `noise_scale_w` adds rhythmic variation for dramatic pauses.
+
+### For Stable/Repeatable Output
+
+```json
+{
+  "noise_scale": 0.3,
+  "noise_scale_w": 0.3,
+  "speed": 1.0
+}
+```
+
+Minimize both noise parameters to reduce randomness. Output will still vary slightly across calls, but much less.
+
+### Parameter Boundary Warnings
+
+- `noise_scale > 0.9`: model produces unstable/glitchy audio — clipping, pitch jumps, robotic artifacts
+- `speed < 0.5`: severely distorted, syllables may be dropped
+- `speed > 1.8`: audio becomes compressed and unintelligible
+- `noise_scale_w < 0.2`: monotone, robotic rhythm with no natural variation
 
 ## Voice Catalog
 
-For the complete voice table with voice actor names and notes, read **`references/voices.md`**.
+For the complete 65-voice table with voice actors, read **`references/voices.md`**.
 
-### Quick Reference: Popular Characters
+For the JP→voice-key mapping (Japanese character name → simplified Chinese key), read **`references/voices.md`** (appendix).
+
+### Popular Characters Quick Reference
 
 | Character | Voice Key | Voice Actor | Voice Type |
 |-----------|-----------|-------------|------------|
@@ -180,48 +224,66 @@ For the complete voice table with voice actor names and notes, read **`reference
 | Raiden Shogun | `雷电将军` | Sawashiro Miyuki | Noble, commanding |
 | Zhongli | `钟离` | Maeno Tomoaki | Deep, composed |
 | Yae Miko | `八重神子` | Sakura Ayane | Sly, teasing |
-| Ganyu | `甘雨` | Ueda Reina | Soft, earnest |
-| Kaedehara Kazuha | `万叶` | Shimazaki Nobunaga | Calm, poetic |
-| Yoimiya | `宵宫` | Ueda Kana | Cheerful, energetic |
-| Sangonomiya Kokomi | `心海` | Mimori Suzuko | Serene, strategic |
-| Kamisato Ayato | `神里绫人` | Ishida Akira | Refined, calculating |
 | Nahida | `纳西妲` | Tamura Yukari | Childlike, wise |
 | Shenhe | `申鹤` | Kawasumi Ayako | Aloof, restrained |
-| Ei/Beelzebul | (use `雷电将军`) | — | — |
 | Lumine | `荧` | Yuuki Aoi | Determined, bright |
-| Aether | `空` | Horie Shun | Steady, warm |
 
-### Voice Key Convention
+## Wrapper Implementation
 
-Voice keys use **simplified Chinese** character names as they appear in the upstream model config. Some common mappings:
+The wrapper source is in **`scripts/`**:
 
-| Japanese Name | Voice Key |
-|---------------|-----------|
-| フータオ | `胡桃` |
-| 雷電将軍 | `雷电将军` |
-| 神里綾華 | `神里绫华` |
-| 鍾離 | `钟离` |
-| 八重神子 | `八重神子` |
+- `scripts/app.py` — aiohttp server with gradio_client 0.x integration
+- `scripts/Dockerfile` — container build recipe
 
-If a voice key is not found, the API attempts partial matching against the full display name. If all else fails, check `/v1/models` for the exact key.
+### Key Design Decisions in the Wrapper
 
-## Error Handling
+1. **aiohttp over Flask/FastAPI**: the server must handle concurrent requests while the `gradio_client` websocket call is blocking. `asyncio.to_thread()` offloads each synthesis call to a thread pool.
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `health` returns `voices: 0` | Startup voice init still loading from HF | Wait 10–15 seconds and retry |
-| HTTP 500 | Upstream Space sleeping or queue full | Wait 30–60s for Space to wake; free-tier Spaces have limited capacity |
-| `Unknown voice` | Voice key mismatch | Query `/v1/models` for exact keys; remember keys are simplified Chinese |
-| `TypeError: object NoneType can't be used in 'await'` | aiohttp startup hook incompatibility with Python 3.13 | Ensure `app.on_startup` callbacks are async functions returning None |
-| Port conflict | Another container on same network namespace uses that port | Change `HTTP_PORT` and restart |
-| `gradio_client` connection errors | Wrong `gradio_client` version | Must use `gradio_client<1` (0.x); 2.x is incompatible with Gradio 3.7 |
+2. **Threading Lock**: `gradio_client.Client.predict()` is not thread-safe. A `threading.Lock` serializes all calls through the same client instance. This limits throughput to ~1 request at a time (matching the free-tier Space's queue anyway).
+
+3. **Client TTL**: the `gradio_client` connection is recreated every 5 minutes to avoid stale websocket sessions that accumulate on long-running containers.
+
+4. **Voice init on startup**: the server queries the Space's config at boot to build the voice catalog. If the Space is sleeping, this takes 30–60s — the `/health` endpoint returns `voices: 0` until initialization completes.
+
+### Building from Scratch
+
+```bash
+# Using the skill's scripts/
+docker build -t vits-uma-api:latest -f scripts/Dockerfile scripts/
+
+docker run -d --name vits-uma-api \
+  --restart=unless-stopped \
+  -e HTTP_PORT=8080 \
+  -e LANGUAGE=日语 \
+  vits-uma-api:latest
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HTTP_PORT` | `80` | Listen port |
+| `LANGUAGE` | `日语` | Language filter prefix for voice catalog |
+| `BASE_URL` | `zomehwh/vits-uma-genshin-honkai` | HuggingFace Space identifier |
+
+## Error Matrix
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `health` returns `voices: 0` | Startup voice init still loading | Wait 10–15s and retry |
+| HTTP 500 | Space sleeping or queue full | Wait 30–60s for Space to wake |
+| `Unknown voice` | Voice key mismatch | Query `/v1/models` for exact keys; keys are simplified Chinese |
+| `TypeError: object NoneType can't be used in 'await'` | aiohttp on_startup incompatibility with Python 3.13 | Ensure startup callbacks are async functions returning None |
+| Port conflict | Another service on same port | Change `HTTP_PORT` |
+| gradio_client connection errors | Wrong gradio_client version | Must use `<1` (0.x); 2.x is incompatible with Gradio 3.7 |
 
 ## NEVER
 
-- **NEVER** use `gradio_client>=1` with this container — Gradio 3.7 websocket protocol is incompatible
-- **NEVER** co-locate this container with `qwen-tts2api` on the same Docker network namespace — they require conflicting `gradio_client` versions
-- **NEVER** send non-Japanese text to this API — the VITS-UMA model is Japanese-only; Chinese/English input will produce garbled output
-- **NEVER** set `noise_scale` above 0.9 — the model produces unstable/glitchy audio beyond this threshold
-- **NEVER** assume deterministic output — VITS is a stochastic model; same input may yield different intonation across calls
-- **NEVER** rely on this for real-time streaming — the websocket round-trip adds 1–3s latency per request
-- **NEVER** hardcode the voice key from memory — always verify against `/v1/models` if unsure, as upstream model updates may add or rename voices
+- **NEVER** use `gradio_client>=1` — Gradio 3.7 websocket protocol is incompatible with 2.x
+- **NEVER** co-locate with qwen-tts2api on the same Docker network namespace — conflicting gradio_client versions
+- **NEVER** send non-Japanese text — VITS-UMA is Japanese-only; other languages produce garbled output
+- **NEVER** set `noise_scale > 0.9` — produces unstable/glitchy audio
+- **NEVER** assume deterministic output — VITS is stochastic; same parameters yield different intonation
+- **NEVER** hardcode voice keys from memory — verify against `/v1/models` as upstream updates may rename voices
+- **NEVER** rely on real-time streaming — websocket round-trip adds 1–3s latency per request
+- **NEVER** expect the wrapper to handle concurrent synthesis — the internal Lock serializes all calls
