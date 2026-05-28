@@ -1,6 +1,7 @@
 ---
-name: qwen3-asr-tts-hf2api
+name: qwen3-hf2api
 description: Qwen3 TTS (48 voices, 12 languages) and ASR (32 languages) via local OpenAI-compatible API at localhost:8820. Use this skill whenever you need to generate spoken audio from text, transcribe recordings to text, or work with any voice/audio data. Trigger on: text-to-speech, speech synthesis, voice generation, audio transcription, speech-to-text, STT, TTS, recording transcription, or when the user wants to hear text read aloud. Even if the user doesn't mention "Qwen3" or "hf2api", use this when they need any audio generation or speech recognition task.
+metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"]}}}
 ---
 
 # Qwen3 TTS & ASR
