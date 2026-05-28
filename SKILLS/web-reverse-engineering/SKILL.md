@@ -54,6 +54,9 @@ Target -> What is required?
 
 10) Security logic is in native binary (.so, .exe, .wasm)?
     -> Strings/imports scan → Ghidra/radare2 → dynamic hooking → reimplementation.
+
+11) Target is a HuggingFace Space / Gradio app?
+    -> Check /config for endpoints → map component IDs to fn params → reproduce via REST/WS/SSE (see Gradio Space playbook below).
 ```
 
 ## Common Playbooks
@@ -74,6 +77,49 @@ Target -> What is required?
 2. Externalize proxy pool and health scoring.
 3. Add retries, circuit breakers, dead-letter queue.
 4. Store raw + parsed + trace metadata for replay.
+
+### D) "Wrap a Gradio/HF Space into a production API"
+
+Gradio Spaces expose different API protocols depending on version. The `/config` endpoint reveals everything.
+
+**Step 1: Fetch and parse config**
+```bash
+curl -s https://{space}.hf.space/config | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps({c['id']:c['type'] for c in d['components']}, indent=2))"
+```
+
+**Step 2: Determine protocol**
+
+| Protocol | Gradio | Endpoint | When |
+|----------|--------|----------|------|
+| **REST named** | 3.x | `/api/{api_name}/` POST | `api_name` set in app.py |
+| **REST unnamed** | 3.x | `/api/predict/` POST | No api_name |
+| **WebSocket** | 3.x | `/queue/join` | Queue enabled |
+| **SSE** | 4+ | `/gradio_api/call/{fn}` | Newer Spaces |
+
+**Step 3: Map parameters**
+Config `dependencies` array maps components to function params. Dropdowns with `type="index"` send the INDEX integer via REST but the LABEL string via WebSocket — test both.
+
+**Step 4: Handle output formats**
+- Audio: check `app.py` for `gr.Audio.postprocess` monkeypatch (may return base64 data URI instead of file path)
+- File download: `{base_url}/file={path}` (3.x) or `{base_url}/gradio_api/file={path}` (4+)
+- File upload: `{base_url}/upload` (3.x) or `{base_url}/gradio_api/upload` (4+)
+
+**Step 5: Build resolution layer**
+Gradio dropdown choices rarely match user-facing names. Build multi-layer fallback:
+```
+exact match → prefix match → alias table → case-insensitive → substring
+```
+Extract all choices from config component `choices` array for the map.
+
+**Step 6: Add fallback**
+If the Space has mirrors (forked Spaces), add REST primary + WebSocket fallback with different text limits. Truncate before fallback call.
+
+**Real example (hf2api VITS)**:
+- Discovered via `app.py`: `api_name="generate"`, `concurrency_count=1`
+- REST endpoint: `POST /api/generate/` with `{"data": [text, lang, speaker_id, ns, nsw, ls]}`
+- Response: `{"data": ["成功", "/file=/tmp/gradio/x.wav", "耗时 2.34s"]}`
+- Download: `GET /file=/tmp/gradio/x.wav` → audio bytes
+- Fallback: WebSocket `/queue/join` on forked Space with 100-char limit
 
 ## Anti-Bot Severity Ladder
 
@@ -111,6 +157,7 @@ Target -> What is required?
 - `references/mobile-reverse-engineering.md` — Android/iOS app RE
 - `references/binary-native-reverse-engineering.md` — compiled binary analysis
 - `references/protocol-reverse-engineering.md` — WebSocket, gRPC, custom TCP/UDP
+- `references/gradio-space-reverse-engineering.md` — Gradio/HF Space API patterns (REST, WS, SSE; component mapping; audio output tricks; multi-upstream fallback)
 
 ## When to Escalate vs Stop
 
