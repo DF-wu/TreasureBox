@@ -1,6 +1,6 @@
 ---
 name: vits-hf2api
-description: VITS anime/game character TTS with 500+ voices (Genshin, Star Rail, Uma Musume, Vocaloid, anime) via local OpenAI-compatible API at localhost:8830. Use this skill when the user wants character voice text-to-speech, mentions any anime/game character name, needs Chinese/Japanese/mixed-language TTS, wants whisper/emotional voice effects, or asks for character voice synthesis. Trigger on any mention of: anime voice, game character voice, Genshin voice, HSR voice, 原神语音, 角色语音, VITS, or specific character names. Even if they don't say "VITS" or "hf2api", use this when they need character-based TTS.
+description: VITS anime/game character TTS with 500+ voices (Genshin, Star Rail, Uma Musume, Vocaloid, anime) via local OpenAI-compatible API at localhost port 8830. Use this skill when the user wants character voice text-to-speech, mentions any anime/game character name, needs Chinese/Japanese/mixed-language TTS, wants whisper/emotional voice effects, or asks for character voice synthesis. Trigger on any mention of anime voice, game character voice, Genshin voice, HSR voice, 原神语音, 角色语音, VITS, or specific character names. Even if they do not say VITS or hf2api, use this when they need character-based TTS.
 metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"]}}}
 ---
 
