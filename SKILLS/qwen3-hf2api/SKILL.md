@@ -1,150 +1,190 @@
 ---
-name: qwen3-hf2api
-description: Self-hosted OpenAI-compatible API wrapper for Qwen3 TTS (48 voices, 12 languages) and ASR (32 languages) HuggingFace Spaces. Use when the user mentions Qwen3 TTS, Qwen3 ASR, text-to-speech, speech-to-text, voice synthesis, multilingual TTS, Chinese/Japanese/Korean/English/German/French/Russian/Portuguese/Spanish/Italian TTS, automatic speech recognition, audio transcription, or self-hosted audio API with VPN routing. Also use when debugging Qwen3 upstream issues, deploying HF Space wrappers, integrating voice endpoints, or building Dockerized audio services. Covers voice catalog, language selection, parameter tuning, TTS and ASR endpoints, and Docker deployment with gluetun VPN.
-metadata: {"clawdbot":{"requires":{"bins":["curl","python3","docker"]}}}
+name: qwen3-asr-tts-hf2api
+description: Qwen3 TTS (48 voices, 12 languages) and ASR (32 languages) via local OpenAI-compatible API at localhost:8820. Use this skill whenever you need to generate spoken audio from text, transcribe recordings to text, or work with any voice/audio data. Trigger on: text-to-speech, speech synthesis, voice generation, audio transcription, speech-to-text, STT, TTS, recording transcription, or when the user wants to hear text read aloud. Even if the user doesn't mention "Qwen3" or "hf2api", use this when they need any audio generation or speech recognition task.
 ---
 
-# qwen3-hf2api
+# Qwen3 TTS & ASR
 
-OpenAI-compatible audio API wrapper for Qwen3 TTS and ASR HuggingFace Spaces, self-hosted via Docker with all outbound traffic routed through a gluetun VPN container.
-
-## Architecture
-
-```
-Client ──HTTP──→ qwen3-hf2api ──SSE/websocket──→ HF Space (Qwen3-TTS or Qwen3-ASR)
-                                    │
-                              Docker network_mode: service:gluetun
-```
-
-The wrapper runs an aiohttp server that translates OpenAI-compatible requests into Gradio SSE v3 calls for TTS and multipart form uploads for ASR.
+Local OpenAI-compatible API at `http://localhost:8820`. TTS: 48 voices in 12 languages. ASR: transcription in 32 languages.
 
 ## Endpoints
 
-### `GET /v1/models`
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/v1/models` | Available voices + languages |
+| GET | `/health` | Service health check |
+| POST | `/v1/audio/speech` | Text → WAV audio |
+| POST | `/v1/audio/transcriptions` | Audio file → text JSON |
 
-List available models, voices, and languages.
+## Text-to-Speech
 
-**Response:**
-```json
-{
-  "data": [
-    {"id": "qwen-tts", "type": "tts"},
-    {"id": "qwen3-asr", "type": "asr"},
-    {"id": "qwen3-asr:itn", "type": "asr"}
-  ],
-  "voices": { "vivian": "Vivian / 十三", ... },
-  "languages": { "zh": "Chinese / 中文", ... }
-}
+```
+POST /v1/audio/speech  |  Content-Type: application/json
 ```
 
-### `POST /v1/audio/speech`
+| Parameter | Required | Default | Notes |
+|-----------|----------|---------|-------|
+| `input` | **Yes** | — | Text to speak |
+| `voice` | No | `cherry` | 48 options + 6 OpenAI aliases |
+| `language` | No | `auto` | 12 language codes |
+| `speed` | No | — | Not supported (warning header) |
+| `response_format` | No | `wav` | Only WAV supported |
 
-Text-to-Speech synthesis.
+**OpenAI aliases**: `alloy`→vivian, `echo`→ethan, `fable`→momo, `onyx`→kai, `nova`→chelsie, `shimmer`→serena
 
-**Headers:**
-- `Content-Type: application/json`
-- `Authorization: Bearer <API_KEY>` (optional, only if `API_KEY` env var is set)
+### All Voices
 
-**Body:**
-```json
-{
-  "model": "qwen-tts",
-  "input": "Hello, world!",
-  "voice": "vivian",
-  "language": "auto",
-  "response_format": "wav"
-}
+| ID | Name | | ID | Name |
+|:---|:---|---|:---|:---|
+| cherry | Cherry / 芊悦 | | serena | Serena / 苏瑶 |
+| ethan | Ethan / 晨煦 | | chelsie | Chelsie / 千雪 |
+| momo | Momo / 茉兔 | | vivian | Vivian / 十三 |
+| moon | Moon / 月白 | | maia | Maia / 四月 |
+| kai | Kai / 凯 | | nofish | Nofish / 不吃鱼 |
+| bella | Bella / 萌宝 | | jennifer | Jennifer / 詹妮弗 |
+| ryan | Ryan / 甜茶 | | katerina | Katerina / 卡捷琳娜 |
+| aiden | Aiden / 艾登 | | bodega | Bodega / 西班牙语 |
+| alek | Alek / 俄语 | | dolce | Dolce / 意大利语 |
+| sohee | Sohee / 韩语 | | onoanna | Ono Anna / 日语 |
+| lenn | Lenn / 德语 | | sonrisa | Sonrisa / 拉美西语 |
+| emilien | Emilien / 法语 | | andre | Andre / 葡语欧 |
+| radiogol | Radio Gol / 葡语巴 | | eldric | Eldric Sage / 沧明子 |
+| mia | Mia / 乖小妹 | | mochi | Mochi / 沙小弥 |
+| bellona | Bellona / 燕铮莺 | | vincent | Vincent / 田叔 |
+| bunny | Bunny / 萌小姬 | | neil | Neil / 阿闻 |
+| elias | Elias / 墨讲师 | | arthur | Arthur / 徐大爷 |
+| nini | Nini / 邻家妹妹 | | ebona | Ebona / 诡婆婆 |
+| seren | Seren / 小婉 | | pip | Pip / 调皮小新 |
+| stella | Stella / 美少女阿月 | | li | Li / 南京老李 |
+| marcus | Marcus / 陕西秦川 | | roy | Roy / 闽南阿杰 |
+| peter | Peter / 天津李彼得 | | eric | Eric / 四川程川 |
+| rocky | Rocky / 粤语阿强 | | kiki | Kiki / 粤语阿清 |
+| sunny | Sunny / 四川晴儿 | | jada | Jada / 上海阿珍 |
+| dylan | Dylan / 北京晓东 |
+
+**Languages (TTS)**: `auto`, `zh`, `en`, `ja`, `ko`, `de`, `fr`, `ru`, `pt`, `es`, `it`
+
+## Speech-to-Text
+
+```
+POST /v1/audio/transcriptions  |  Content-Type: multipart/form-data
 ```
 
-**Parameters:**
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `model` | string | No | `qwen-tts` | Ignored (Space uses its own) |
-| `input` | string | Yes | — | Text to synthesize |
-| `voice` | string | No | `vivian` | Voice ID or alias (48 voices) |
-| `language` | string | No | `auto` | Language code (12 options) |
-| `response_format` | string | No | `wav` | Only `wav` supported |
-| `speed` | float | No | — | Not supported (returns `X-Warning`) |
+| Field | Required | Notes |
+|-------|----------|-------|
+| `file` | **Yes** | WAV, MP3, FLAC, OGG, etc. |
+| `model` | No | `qwen3-asr` or `qwen3-asr:itn` (formatted output) |
+| `language` | No | 32 codes. Improves accuracy. |
+| `prompt` | No | Context text to guide style |
 
-**Response:** `audio/wav` binary stream.
+Returns: `{"text": "...", "language": "..."}`
 
-**Voice Aliases:**
-- `alloy` → `vivian`
-- `echo` → `ethan`
-- `fable` → `adam`
-- `onyx` → `jack`
-- `nova` → `chelsea`
-- `shimmer` → `diana`
+**Languages (ASR)**: `auto`, `zh`, `yue`, `en`, `ar`, `de`, `fr`, `es`, `pt`, `id`, `it`, `ko`, `ru`, `th`, `vi`, `ja`, `tr`, `hi`, `ms`, `nl`, `sv`, `da`, `fi`, `pl`, `cs`, `fil`, `fa`, `el`, `ro`, `hu`, `mk`
 
-### `POST /v1/audio/transcriptions`
+## Examples
 
-Automatic Speech Recognition (ASR).
-
-**Headers:**
-- `Content-Type: multipart/form-data`
-- `Authorization: Bearer <API_KEY>` (optional)
-
-**Form Fields:**
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `file` | File | Yes | — | Audio file (WAV, MP3, etc.) |
-| `model` | string | No | `qwen3-asr` | Use `qwen3-asr:itn` for inverse text normalization |
-| `language` | string | No | `auto` | Language hint (32 options) |
-| `prompt` | string | No | — | Optional prompt for ASR |
-
-**Response:**
-```json
-{
-  "text": "Transcribed text here"
-}
-```
-
-**Note:** If the upstream ASR Space returns `error:null`, the endpoint returns HTTP 503 with:
-```json
-{"error": "ASR upstream unavailable: Space returns error:null"}
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TTS_BASE_URL` | `https://qwen-qwen3-tts-demo.hf.space` | Qwen3 TTS Space URL |
-| `ASR_BASE_URL` | `https://qwen-qwen3-asr.hf.space` | Qwen3 ASR Space URL |
-| `HOST` | `0.0.0.0` | Listen host |
-| `PORT` | `80` | Listen port |
-| `API_KEY` | *(none)* | Optional Bearer token |
-| `DEFAULT_VOICE` | `vivian` | Default TTS voice |
-| `DEFAULT_LANGUAGE` | `auto` | Default language |
-| `REQUEST_TIMEOUT` | `300` | Upstream timeout (seconds) |
-
-## Deployment
-
+### Discover health + models
 ```bash
-docker compose up -d
+curl -s http://localhost:8820/health
+curl -s http://localhost:8820/v1/models | python3 -m json.tool
 ```
 
-All outbound traffic routes through the `gluetun` VPN container.
+### TTS — multi-language
+```bash
+# English
+curl -sX POST http://localhost:8820/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"The weather is beautiful today.","voice":"serena","language":"en"}' -o en.wav
 
-## Docker Compose Snippet
+# Chinese
+curl -sX POST http://localhost:8820/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"今天天气真好。","voice":"ethan","language":"zh"}' -o zh.wav
 
-```yaml
-services:
-  qwen3-hf2api:
-    build: ./qwen3-hf2api
-    network_mode: "service:gluetun"
-    environment:
-      PORT: "8820"
-      API_KEY: ${API_KEY:-}
-    depends_on:
-      gluetun:
-        condition: service_healthy
+# Japanese
+curl -sX POST http://localhost:8820/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"今日はいい天気ですね。","voice":"onoanna","language":"ja"}' -o ja.wav
+
+# Korean
+curl -sX POST http://localhost:8820/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"오늘 날씨가 좋네요.","voice":"sohee","language":"ko"}' -o ko.wav
 ```
 
-## Voice Catalog
+### TTS — OpenAI alias (drop-in compatible)
+```bash
+curl -sX POST http://localhost:8820/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"tts-1","input":"Hello!","voice":"alloy"}' -o openai.wav
+```
 
-For the complete 48-voice table, read **`references/voices.json`**.
+### ASR — basic + ITN + language hint
+```bash
+# Basic
+curl -sX POST http://localhost:8820/v1/audio/transcriptions -F file=@recording.wav
 
-## Language Catalog
+# ITN: "123" → "one hundred twenty three"
+curl -sX POST http://localhost:8820/v1/audio/transcriptions \
+  -F file=@recording.wav -F model=qwen3-asr:itn -F language=en
 
-For TTS languages (12), read **`references/tts_languages.json`**.
-For ASR languages (32), read **`references/asr_languages.json`**.
+# Language hint + context prompt
+curl -sX POST http://localhost:8820/v1/audio/transcriptions \
+  -F file=@tech_talk.wav -F language=zh \
+  -F prompt="关于机器学习的演讲"
+```
+
+### Python (aiohttp)
+```python
+import aiohttp
+
+async def tts(text: str, voice="vivian", lang="auto") -> bytes:
+    async with aiohttp.ClientSession() as s:
+        async with s.post("http://localhost:8820/v1/audio/speech",
+            json={"input": text, "voice": voice, "language": lang}) as r:
+            return await r.read()
+
+async def asr(path: str, lang="auto") -> dict:
+    data = aiohttp.FormData()
+    data.add_field("file", open(path, "rb"))
+    data.add_field("language", lang)
+    async with aiohttp.ClientSession() as s:
+        async with s.post("http://localhost:8820/v1/audio/transcriptions", data=data) as r:
+            return await r.json()
+```
+
+### Python (openai SDK compatible)
+```python
+# Works with openai library if pointed to localhost
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:8820/v1", api_key="not-needed")
+
+# TTS
+with client.audio.speech.with_streaming_response.create(
+    model="tts-1", voice="alloy", input="Hello world!"
+) as r:
+    r.stream_to_file("output.wav")
+
+# ASR
+r = client.audio.transcriptions.create(
+    model="qwen3-asr", file=open("recording.wav", "rb"), language="en"
+)
+print(r.text)
+```
+
+## Error Reference
+
+| Code | Meaning | Action |
+|:---|:---|:---|
+| 400 | Bad request | Check `input` field is present and valid JSON |
+| 401 | Auth required | Add `Authorization: Bearer <key>` header |
+| 502 | Upstream error | Voice/language combo unavailable. Retry or switch. |
+| 503 | Space unavailable | Heavy load. Wait and retry. |
+
+## Known Issues
+
+- `speed` not supported (upstream limitation) — returns `X-Warning` header
+- Chelsea, Luna voices occasionally fail — retry or pick another
+- Output always WAV — no mp3/opus conversion
+- ASR may timeout on first request (cold GPU start)
+- Custom voice cloning needs local Qwen3-TTS deployment, not available via HF Space
