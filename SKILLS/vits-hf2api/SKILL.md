@@ -1,176 +1,174 @@
 ---
 name: vits-hf2api
-description: Direct access to VITS anime/game character TTS (500+ voices) on HuggingFace Spaces via Gradio 3.x REST API and WebSocket. Use when you need Genshin, Star Rail, Uma Musume, Vocaloid, or anime character voice synthesis - call the HF Space directly with curl, no local server needed. Trigger on any anime voice, game character TTS, or character name mention.
+description: VITS anime/game character TTS (500+ voices) via HuggingFace Spaces. Use when you need Genshin, Star Rail, Uma Musume, Vocaloid, or anime character voice synthesis. Includes ready-to-use bash and Python functions. Trigger on any anime voice, game character TTS, character name mention, or voice synthesis request.
 metadata: {"clawdbot":{"requires":{"bins":["curl","python3"]}}}
 ---
 
-# VITS Character TTS (Direct HF Space API)
+# VITS Character TTS
 
-500+ anime/game character voices via Gradio 3.x REST API. Two upstream Spaces, each with different API styles.
+500+ anime/game character voices. Copy the functions below — done.
 
-## Spaces
-
-| Role | Space | Protocol | Endpoint | Text Limit |
-|------|-------|----------|----------|------------|
-| **Primary** | `ikechan8370-vits-uma-genshin-honkai.hf.space` | REST | `POST /api/generate/` | 500 chars |
-| **Fallback** | `zomehwh-vits-uma-genshin-honkai.hf.space` | WebSocket | `wss://.../queue/join` | 100 chars |
-
-Always try REST first. Fall back to WebSocket if REST fails or returns error.
+Two upstreams with auto-fallback: REST API (500 chars, integer speaker ID) then WebSocket (100 chars, string speaker name).
 
 ---
 
-## Primary: REST API (ikechan8370)
-
-### One-shot curl
+## Quick Functions (bash — copy-paste ready)
 
 ```bash
-curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
-  -H "Content-Type: application/json" \
-  -d '{"data":["你好旅行者！","中文",0,0.6,0.668,1.2]}' | python3 -c "
+vits_tts() {
+  # Usage: vits_tts "text" [speaker_id] [lang] [noise] [output_file]
+  # speaker_id default: 0 (派蒙)
+  # lang default: 中文
+  local text="${1:?Usage: vits_tts <text> [speaker_id] [lang] [noise] [output]}"
+  local sid="${2:-0}"
+  local lang="${3:-中文}"
+  local noise="${4:-0.6}"
+  local out="${5:-vits_output.wav}"
+
+  # Try REST API (ikechan8370, 500 char limit)
+  local result=$(curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
+    -H "Content-Type: application/json" \
+    -d "{\"data\":[\"$text\",\"$lang\",$sid,$noise,0.668,1.2]}")
+  if echo "$result" | python3 -c "import sys,json;d=json.load(sys.stdin);sys.exit(0 if 'data' in d else 1)" 2>/dev/null; then
+    local file_path=$(echo "$result" | python3 -c "import sys,json;print(json.load(sys.stdin)['data'][1])")
+    curl -s "https://ikechan8370-vits-uma-genshin-honkai.hf.space/file=$file_path" -o "$out"
+    echo "Saved: $out (REST)"
+    return 0
+  fi
+
+  # Fallback: would need websocket. For now, report error.
+  echo "ERROR: REST API failed. Try shorter text (<100 chars) or different speaker." >&2
+  echo "Response: $result" >&2
+  return 1
+}
+
+# Examples:
+# vits_tts "你好旅行者！"
+# vits_tts "おやすみなさい" 30 "日语"                           # 神里绫华, Japanese
+# vits_tts "運命を切り開く" 131 "日语"                           # 黄泉, Japanese
+# vits_tts "夜深了呢…你还没睡吗？" 25 "中文" 0.3 ganyu_whisper.wav  # 甘雨 whisper
+```
+
+### Discover speakers
+
+```bash
+vits_speakers() {
+  # Usage: vits_speakers [search_term]
+  # Lists speaker IDs and names. Optional search filter.
+  curl -s "https://ikechan8370-vits-uma-genshin-honkai.hf.space/config" | \
+    python3 -c "
 import sys, json
-result = json.load(sys.stdin)
-if 'error' in result:
-    print('ERROR:', result['error'])
-    sys.exit(1)
-file_path = result['data'][1]
-import subprocess
-subprocess.run(['curl', '-s', f'https://ikechan8370-vits-uma-genshin-honkai.hf.space/file={file_path}', '-o', 'vits_output.wav'])
-print('OK:', result['data'][2])
-"
+config = json.load(sys.stdin)
+choices = [c['choices'] for c in config['components'] if c.get('type') == 'dropdown' and len(c.get('choices',[])) > 100][0]
+query = '${1:-}'.lower()
+for i, name in enumerate(choices):
+    if query in name.lower() or not query:
+        print(f'{i:>4}  {name}')
+" 2>/dev/null || echo "Space may be sleeping. Try again in 30s."
+}
+
+# Examples:
+# vits_speakers              # list all 800+ speakers
+# vits_speakers 神里          # search Chinese
+# vits_speakers ayaka         # won't match — use Chinese name
+# vits_speakers 甘雨          # find Ganyu
 ```
 
-### Parameters
+---
 
-`{"data": [text, language, speaker_id, noise_scale, noise_scale_w, length_scale]}`
-
-| Position | Name | Type | Default | Range | Notes |
-|----------|------|------|---------|-------|-------|
-| 0 | text | string | — | ≤500 chars | Text to speak |
-| 1 | language | string | `"中文"` | — | Exact dropdown string |
-| 2 | speaker_id | int | `0` | 0-based index | Speaker index from table |
-| 3 | noise_scale | float | `0.6` | 0.1–1.0 | Emotional variation (lower=flatter) |
-| 4 | noise_scale_w | float | `0.668` | 0.1–1.0 | Phoneme length variation |
-| 5 | length_scale | float | `1.2` | 0.1–2.0 | Speed (higher=slower) |
-
-### Response
-
-```json
-{"data": ["生成成功!", "/file=/tmp/gradio/xxx.wav", "生成耗时 2.34 s"], "duration": 2.5}
-```
-
-- `data[0]`: success/error message
-- `data[1]`: file path — download via `GET /file={path}`
-- `data[2]`: timing info
-
-Error: `{"error": "error message", "duration": 0.01}`
-
-### Python
+## Python Functions (copy-paste ready)
 
 ```python
-import aiohttp, json, asyncio
+import aiohttp, json, asyncio, base64, random, string
+import websockets
 
-async def vits_tts(text: str, speaker_id=0, lang="中文", ns=0.6, nsw=0.668, ls=1.2) -> bytes:
-    base = "https://ikechan8370-vits-uma-genshin-honkai.hf.space"
+REST_BASE = "https://ikechan8370-vits-uma-genshin-honkai.hf.space"
+WS_BASE = "wss://zomehwh-vits-uma-genshin-honkai.hf.space/queue/join"
+
+# === REST API (primary, 500 chars) ===
+
+async def vits_tts_rest(text: str, speaker_id: int = 0, lang: str = "中文",
+                         noise: float = 0.6, nsw: float = 0.668, ls: float = 1.2) -> bytes:
+    """Primary: ikechan8370 REST API. Returns WAV bytes."""
     async with aiohttp.ClientSession() as s:
-        async with s.post(f"{base}/api/generate/",
-            json={"data": [text, lang, speaker_id, ns, nsw, ls]}
-        ) as r:
+        async with s.post(f"{REST_BASE}/api/generate/",
+                json={"data": [text, lang, speaker_id, noise, nsw, ls]}) as r:
             result = await r.json()
         if "error" in result:
             raise RuntimeError(result["error"])
-        file_path = result["data"][1]
-        async with s.get(f"{base}/file={file_path}") as r:
+        path = result["data"][1]
+        async with s.get(f"{REST_BASE}/file={path}") as r:
             return await r.read()
 
-audio = asyncio.run(vits_tts("你好旅行者！", speaker_id=23, lang="中文"))
-with open("out.wav", "wb") as f: f.write(audio)
-```
+# === WebSocket fallback (100 chars) ===
 
-### Languages
-
-| String | Meaning |
-|--------|---------|
-| `中文` | Chinese — auto-wrapped in `[ZH]...[ZH]` |
-| `日语` | Japanese — auto-wrapped in `[JA]...[JA]` |
-| `中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）` | Mixed — provide `[ZH]`/`[JA]` tags yourself |
-
-Mix format: `[ZH]中文[JA]日本語[ZH]又是中文`
-
-### Whisper / Soft Voice
-
-| Parameter | Normal | Whisper |
-|-----------|--------|---------|
-| noise_scale | 0.6 | **0.3** |
-| noise_scale_w | 0.668 | 0.668 |
-| length_scale | 1.2 | **1.4** |
-
----
-
-## Fallback: WebSocket (zomehwh)
-
-Use only when REST API fails. Text limit is 100 characters.
-
-### WebSocket Protocol
-
-```
-1. Connect: wss://zomehwh-vits-uma-genshin-honkai.hf.space/queue/join
-2. RECV: {"msg": "send_hash"}
-3. SEND: {"session_hash": "<random_11>", "fn_index": 0}
-4. RECV: {"msg": "estimation"} (ignore)
-5. RECV: {"msg": "send_data"}
-6. SEND: {"data": [text, lang_str, speaker_str, ns, nsw, ls], "fn_index": 0, "session_hash": "<same>"}
-7. RECV: {"msg": "process_completed", "output": {"data": [...]}}
-```
-
-Key difference from REST: **speaker is a STRING** (exact Gradio dropdown value), not integer ID. Also: this space monkeypatches audio output to base64 data URI, so `data[1]` contains `data:audio/wav;base64,...` directly — no separate download.
-
-### Python (websockets)
-
-```python
-import websockets, json, random, string, base64, asyncio
-
-async def vits_ws(text: str, speaker="派蒙", lang="中文", ns=0.6, nsw=0.668, ls=1.2) -> bytes:
-    url = "wss://zomehwh-vits-uma-genshin-honkai.hf.space/queue/join"
+async def vits_tts_ws(text: str, speaker: str = "派蒙", lang: str = "中文",
+                       noise: float = 0.6, nsw: float = 0.668, ls: float = 1.2) -> bytes:
+    """Fallback: zomehwh WebSocket. Speaker must be exact Gradio dropdown string."""
+    if len(text) > 100:
+        text = text[:100]
     sh = ''.join(random.choices(string.ascii_letters + string.digits, k=11))
-    async with websockets.connect(url) as ws:
-        # Step 2: wait for send_hash
-        await ws.recv()
-        # Step 3: send hash
+    async with websockets.connect(WS_BASE, additional_headers={
+        "User-Agent": "Mozilla/5.0"
+    }) as ws:
+        await ws.recv()  # send_hash
         await ws.send(json.dumps({"session_hash": sh, "fn_index": 0}))
-        # Step 4-5: wait for send_data
         while True:
             msg = json.loads(await ws.recv())
             if msg.get("msg") == "send_data": break
-        # Step 6: send data
-        await ws.send(json.dumps({"data": [text, lang, speaker, ns, nsw, ls], "fn_index": 0, "session_hash": sh}))
-        # Step 7-8: wait for process_completed
+        await ws.send(json.dumps({"data": [text, lang, speaker, noise, nsw, ls],
+                                   "fn_index": 0, "session_hash": sh}))
         while True:
             msg = json.loads(await ws.recv())
             if msg.get("msg") == "process_completed":
+                if not msg.get("success", True):
+                    raise RuntimeError(msg.get("output", {}).get("error", "Unknown error"))
                 data = msg["output"]["data"]
                 if isinstance(data[1], str) and data[1].startswith("data:audio/wav;base64,"):
                     return base64.b64decode(data[1].split(",", 1)[1])
                 raise RuntimeError("Unexpected WS output format")
+
+# === Combined (auto-fallback) ===
+
+async def vits_tts(text: str, speaker_id: int = 0,
+                    ws_speaker: str = "派蒙", lang: str = "中文",
+                    noise: float = 0.6, nsw: float = 0.668, ls: float = 1.2) -> bytes:
+    """Try REST first, fall back to WebSocket."""
+    try:
+        return await vits_tts_rest(text, speaker_id, lang, noise, nsw, ls)
+    except Exception:
+        return await vits_tts_ws(text, ws_speaker, lang, noise, nsw, ls)
+
+# Sync wrapper
+def vits_tts_sync(text: str, speaker_id: int = 0, ws_speaker: str = "派蒙",
+                  lang: str = "中文", noise: float = 0.6) -> bytes:
+    return asyncio.run(vits_tts(text, speaker_id, ws_speaker, lang, noise))
+
+# --- Usage ---
+# audio = asyncio.run(vits_tts("你好旅行者！", speaker_id=0))  # 派蒙, REST
+# audio = asyncio.run(vits_tts("おやすみ", speaker_id=30, lang="日语"))  # 神里绫华
+# audio = vits_tts_sync("Hello!", speaker_id=442, lang="日语")  # Rem, sync
+# audio = asyncio.run(vits_tts("text", ws_speaker="神里绫华（龟龟）", lang="日语"))  # force WS
 ```
 
-### WS Speaker Strings (Gradio dropdown values)
+### Discover speakers (Python)
 
-The WebSocket requires exact Gradio dropdown strings. Key examples:
+```python
+async def vits_speakers(search: str = "") -> list:
+    """Returns [(id, name), ...] for all 800+ speakers. Optional search filter."""
+    async with aiohttp.ClientSession() as s:
+        async with s.get(f"{REST_BASE}/config") as r:
+            config = await r.json()
+    for c in config["components"]:
+        if c.get("type") == "dropdown" and len(c.get("choices", [])) > 100:
+            choices = c["choices"]
+            q = search.lower()
+            return [(i, n) for i, n in enumerate(choices) if q in n.lower() or not q]
+    return []
 
-| Simplified | WS String | ID (REST) |
-|:---|:---|:--|
-| 派蒙 | `派蒙` | 0 |
-| 钟离 | `钟离` | 23 |
-| 甘雨 | `甘雨（椰羊）` | 25 |
-| 胡桃 | `胡桃` | 27 |
-| 神里绫华 | `神里绫华（龟龟）` | 30 |
-| 雷电将军 | `雷电将军（雷神）` | 33 |
-| 纳西妲 | `纳西妲（草神）` | 48 |
-| 芙宁娜 | `芙宁娜` | 63 |
-| 三月七 | `三月七` | 100 |
-| 卡芙卡 | `卡芙卡` | 104 |
-| 黄泉 | `黄泉` | 131 |
-| 流萤 | `流萤` | 135 |
+# speakers = asyncio.run(vits_speakers())
+# ganyu = asyncio.run(vits_speakers("甘雨"))  # find Ganyu's ID
+```
 
 ---
 
@@ -179,13 +177,12 @@ The WebSocket requires exact Gradio dropdown strings. Key examples:
 ### Genshin Impact
 | ID | Name | | ID | Name |
 |:--|:---|---|:--|:---|
-| 0 | 派蒙 | | 1 | 琴 |
-| 23 | 钟离 | | 25 | 甘雨 |
-| 27 | 胡桃 | | 29 | 万叶 |
-| 30 | 神里绫华 | | 33 | 雷电将军 |
-| 39 | 八重神子 | | 48 | 纳西妲 |
-| 63 | 芙宁娜 | | 65 | 那维莱特 |
-| 76 | 荧 | | 5 | 温迪 |
+| 0 | 派蒙 | | 23 | 钟离 |
+| 25 | 甘雨 | | 27 | 胡桃 |
+| 29 | 枫原万叶 | | 30 | 神里绫华 |
+| 33 | 雷电将军 | | 39 | 八重神子 |
+| 48 | 纳西妲 | | 63 | 芙宁娜 |
+| 65 | 那维莱特 | | 76 | 荧 |
 
 ### Honkai Star Rail
 | ID | Name | | ID | Name |
@@ -217,7 +214,7 @@ The WebSocket requires exact Gradio dropdown strings. Key examples:
 | 458 | 亚丝娜 | SAO |
 | 491 | 鸣人 | Naruto |
 | 524 | 路飞 | One Piece |
-| 551 | 炭治郎 | 鬼滅之刃 |
+| 551 | 炭治郎 | 鬼滅の刃 |
 | 603 | 艾伦 | 進撃の巨人 |
 | 604 | 三笠 | 進撃の巨人 |
 | 606 | 利威尔 | 進撃の巨人 |
@@ -229,12 +226,44 @@ The WebSocket requires exact Gradio dropdown strings. Key examples:
 | 648 | 初音未来 |
 | 652 | 洛天依 |
 
-Full speaker list: 500+ entries. Search with `curl -s 'https://ikechan8370-vits-uma-genshin-honkai.hf.space/config'` → component ID 13 `choices` array.
+Full speaker list (800+): `vits_speakers` function above.
 
-## Common Gotchas
+## WebSocket Speaker Strings
 
-1. **REST vs WS speaker format**: REST uses integer ID; WS uses exact dropdown string. Watch the difference.
-2. **Cold start**: First request after idle may take 20-40s.
-3. **卡芙卡 + zh**: Fails on both Spaces. Use `日语` language instead.
-4. **Text limit**: REST = 500 chars, WS = 100 chars. Truncate before WS call.
-5. **REST response**: Audio is a separate file download. WS response: base64 inline.
+The WS fallback uses Gradio dropdown display strings (not IDs). Key examples:
+
+| REST ID | WS String |
+|:--|:---|
+| 0 | `派蒙` |
+| 23 | `钟离` |
+| 25 | `甘雨（椰羊）` |
+| 30 | `神里绫华（龟龟）` |
+| 33 | `雷电将军（雷神）` |
+| 48 | `纳西妲（草神）` |
+| 104 | `卡芙卡` |
+| 131 | `黄泉` |
+
+## Languages
+
+| String | Meaning |
+|--------|---------|
+| `中文` | Chinese — auto-wrapped `[ZH]...[ZH]` |
+| `日语` | Japanese — auto-wrapped `[JA]...[JA]` |
+| `中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）` | Mixed — provide tags |
+
+Mix format: `[ZH]中文[JA]日本語[ZH]又是中文`
+
+## Whisper Voice
+
+| Param | Normal | Whisper |
+|-------|--------|---------|
+| noise_scale | 0.6 | **0.3** |
+| length_scale | 1.2 | **1.4** |
+
+## Gotchas
+
+1. REST = integer speaker ID. WS = exact Gradio dropdown string. Don't mix them.
+2. 卡芙卡 + 中文: fails upstream. Use `日语`.
+3. Cold start: 20-40s first request.
+4. REST text limit: 500 chars. WS: 100 chars (truncated).
+5. `vits_speakers` may timeout if Space sleeping — retry.
