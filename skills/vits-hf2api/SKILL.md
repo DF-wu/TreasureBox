@@ -43,49 +43,120 @@ ikechan8370（无需 session_hash）→ AHJoong（需 session_hash）→ OldSeco
 
 ---
 
-## Quick Functions (bash — copy-paste ready)
+## curl 一鍵範例（依上游分類）
+
+### ikechan8370（主要，無需 session_hash）
+
+```bash
+# 中文 + 派蒙
+curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
+  -H "Content-Type: application/json" \
+  -d '{"fn_index":0,"data":["你好旅行者！","中文","派蒙",0.6,0.668,1.2]}'
+
+# 日语 + 神里绫华（早見沙織）
+curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
+  -H "Content-Type: application/json" \
+  -d '{"fn_index":0,"data":["おはようございます","日语","神里绫华（龟龟）",0.6,0.668,1.2]}'
+
+# 日语 + 甘雨（上田麗奈）
+curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
+  -H "Content-Type: application/json" \
+  -d '{"fn_index":0,"data":["ふわぁ…朝ですか…","日语","甘雨（椰羊）",0.6,0.668,1.2]}'
+
+# 中日混合
+curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
+  -H "Content-Type: application/json" \
+  -d '{"fn_index":0,"data":["[ZH]你好[JA]こんにちは","中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）","派蒙",0.6,0.668,1.2]}'
+```
+
+Response: `{"data":["生成成功!",{"name":"/tmp/xxx.wav",...}]}` → download with `curl -s "https://...hf.space/file={name}" -o out.wav`
+
+### AHJoong / OldSecond（備援，需 session_hash）
+
+```bash
+# 需加 session_hash（任意 11 字元亂數）
+SH="test1234567"
+curl -sX POST "https://AHJoong-vits-uma-genshin-honkai.hf.space/api/generate/" \
+  -H "Content-Type: application/json" \
+  -d "{\"fn_index\":0,\"session_hash\":\"$SH\",\"data\":[\"你好\",\"中文\",\"派蒙\",0.6,0.668,1.2]}"
+
+# OldSecond 格式完全相同
+curl -sX POST "https://OldSecond-vits-uma-genshin-honkai.hf.space/api/generate/" \
+  -H "Content-Type: application/json" \
+  -d "{\"fn_index\":0,\"session_hash\":\"$SH\",\"data\":[\"おはよう\",\"日语\",\"神里绫华（龟龟）\",0.6,0.668,1.2]}"
+```
+
+Response 格式與 ikechan8370 相同（dict file path）。
+
+### zomehwh WS（最後手段，100 字限制）
+
+WS response 是 base64 inline WAV（不需另外下載）：
+```python
+# WS 需要 Python websockets 庫
+import asyncio, json, random, string, base64, websockets
+async def ws_tts(text, lang, speaker):
+    sh = ''.join(random.choices(string.ascii_letters + string.digits, k=11))
+    ws_url = 'wss://zomehwh-vits-uma-genshin-honkai.hf.space/queue/join'
+    async with websockets.connect(ws_url, additional_headers={'User-Agent':'Mozilla/5.0'}) as ws:
+        await ws.recv()
+        await ws.send(json.dumps({'session_hash':sh, 'fn_index':0}))
+        while True:
+            msg = json.loads(await ws.recv())
+            if msg.get('msg') == 'send_data': break
+        await ws.send(json.dumps({'data':[text,lang,speaker,0.6,0.668,1.2],'fn_index':0,'session_hash':sh}))
+        while True:
+            msg = json.loads(await ws.recv())
+            if msg.get('msg') == 'process_completed':
+                return base64.b64decode(msg['output']['data'][1].split(',',1)[1])
+```
+
+## 完整 bash 函數（curl only，處理 dict response）
 
 ```bash
 vits_tts() {
-  # Usage: vits_tts "text" [speaker_id] [lang] [noise] [output_file]
-  local text="${1:?Usage: vits_tts <text> [speaker_id] [lang] [noise] [output]}"
-  local sid="${2:-0}"
+  # Usage: vits_tts "text" [speaker] [lang] [noise] [output]
+  local text="${1:?Usage: vits_tts <text> [speaker] [lang] [noise] [output]}"
+  local speaker="${2:-派蒙}"
   local lang="${3:-中文}"
   local noise="${4:-0.6}"
   local out="${5:-vits_output.wav}"
   local result=$(curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
     -H "Content-Type: application/json" \
-    -d "{\"data\":[\"$text\",\"$lang\",$sid,$noise,0.668,1.2]}")
+    -d "{\"fn_index\":0,\"data\":[\"$text\",\"$lang\",\"$speaker\",$noise,0.668,1.2]}")
   if echo "$result" | python3 -c "import sys,json;d=json.load(sys.stdin);sys.exit(0 if 'data' in d else 1)" 2>/dev/null; then
-    local fp=$(echo "$result" | python3 -c "import sys,json;print(json.load(sys.stdin)['data'][1])")
+    local fp=$(echo "$result" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)['data'][1]
+print(d['name'] if isinstance(d,dict) else d)")
     curl -s "https://ikechan8370-vits-uma-genshin-honkai.hf.space/file=$fp" -o "$out"
-    echo "Saved: $out" && return 0
+    echo "Saved: $out ($(wc -c < $out) bytes)" && return 0
   fi
-  echo "ERROR: REST API failed. Try shorter text (<100 chars) or different speaker." >&2
+  echo "ERROR: $(echo "$result" | python3 -c "import sys,json;print(json.load(sys.stdin).get('error','unknown'))" 2>/dev/null)" >&2
   return 1
 }
 
-# vits_tts "你好旅行者！"                          # 派蒙, Chinese
-# vits_tts "おやすみなさい" 30 "日语"               # 神里绫华, Japanese
-# vits_tts "運命を切り開く" 131 "日语"               # 黄泉, Japanese
-# vits_tts "夜深了呢…" 25 "中文" 0.3 ganyu_whisper.wav  # 甘雨 whisper
+# vits_tts "你好旅行者！"                          # 派蒙, 中文
+# vits_tts "おやすみなさい" "神里绫华（龟龟）" "日语"  # 神里绫华, 日语
+# vits_tts "運命を切り開く" "黄泉" "日语"              # 黄泉, 日语
+# vits_tts "夜深了呢…" "甘雨（椰羊）" "中文" 0.3 ganyu.wav  # 甘雨 whisper
 ```
 
-### Search speakers
+### Search speakers（curl only）
 
 ```bash
 vits_speakers() {
   curl -s "https://ikechan8370-vits-uma-genshin-honkai.hf.space/config" | python3 -c "
-import sys,json;c=json.load(sys.stdin)['components']
-choices=[x['choices']for x in c if x.get('type')=='dropdown'and len(x.get('choices',[]))>100][0]
-q='${1:-}'.lower()
+import sys,json
+c=json.load(sys.stdin).get('components',[])
+choices=[x['choices']for x in c if x.get('type')=='dropdown'and len(x.get('choices',[]))>100]
+if not choices: print('Space sleeping. Retry in 30s.'); exit()
+choices=choices[0];q='${1:-}'.lower()
 [print(f'{i:>4}  {n}')for i,n in enumerate(choices)if q in n.lower()or not q]
-" 2>/dev/null || echo "Space sleeping. Retry in 30s."
+" 2>/dev/null
 }
 
 # vits_speakers          # list all 800+
-# vits_speakers 神里      # search Chinese
-# vits_speakers リサ      # search Japanese
+# vits_speakers 神里      # search
 ```
 
 ---
