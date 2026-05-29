@@ -666,7 +666,7 @@ Pre-compiled static binary (`vits-tts`) bundled in this skill directory. Ready t
 ./vits-tts "こんにちは、旅人さん"
 
 # Or build from source
-cd vits-hf2api-go && CGO_ENABLED=0 go build -ldflags="-s -w" -o vits-tts .
+cd vits-hf2api && CGO_ENABLED=0 go build -ldflags="-s -w" -o vits-tts ./cmd/vits-tts/
 ```
 
 ### Quick Start
