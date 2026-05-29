@@ -7,9 +7,39 @@ description: "VITS anime/game character TTS (800+ voices from Genshin, Star Rail
 
 800+ anime/game character voices. Copy the functions below — done.
 
-> **Limits**: REST primary = 500 chars · WS fallback = 100 chars · Cold start 20-40s · 卡芙卡 zh fails
-> **Retry**: 3-URL REST retry chain (ikechan8370 → AHJoong → OldSecond) before WS fallback
-> **Per-character**: `zomehwh/vits-models-genshin-bh3` for ayaka-jp, nahida-jp, abyssinvoker, keqing, eula, bronya, theresa
+## Critical: Upstream API Differences
+
+| Upstream | Type | Session Hash | Speaker Format | Response |
+|----------|------|-------------|----------------|----------|
+| `ikechan8370/vits-uma-genshin-honkai` | REST `/api/generate/` | No | Gradio dropdown string | `data[1]` = `{"name":"/tmp/x.wav"}` → download `/file={name}` |
+| `AHJoong/vits-uma-genshin-honkai` | REST `/api/generate/` | **Required** | Gradio dropdown string | same |
+| `OldSecond/vits-uma-genshin-honkai` | REST `/api/generate/` | **Required** | Gradio dropdown string | same |
+| `zomehwh/vits-uma-genshin-honkai` | WebSocket `/queue/join` | WS protocol | Gradio dropdown string | base64 inline WAV |
+
+### Speaker: MUST use exact Gradio dropdown strings
+
+- ✅ `"神里绫华（龟龟）"` `"甘雨（椰羊）"` `"派蒙"` `"琴"`
+- ❌ Integer IDs (Gradio dropdown index ≠ SPEAKERS dict value)
+- ❌ `"神里綾華"` (traditional Chinese 綾 ≠ simplified 绫 in dropdown)
+- `resolve_speaker_gradio()` handles string-to-dropdown resolution
+- REST = int ID（旧版已弃用、现在全部用 dropdown 字串）
+
+### Language: Gradio dropdown values
+
+| API Key | Gradio String |
+|---------|---------------|
+| `"zh"` | `"中文"` |
+| `"ja"` | `"日语"` (**not** `"日本語"`) |
+| `"mix"` | `"中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）"` |
+
+### Retry Chain
+
+ikechan8370（无需 session_hash）→ AHJoong（需 session_hash）→ OldSecond（需 session_hash）→ zomehwh WS（100 字限制）
+
+- 只有 retriable error（timeout/5xx/connection）才重试
+- 4xx / bad format 立即 502、不 fallback
+
+> **Limits**: REST primary = 500 chars · WS fallback = 100 chars · Cold start 20-40s · 卡芙カ zh fails
 
 ---
 
