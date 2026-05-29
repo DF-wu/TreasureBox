@@ -66,7 +66,7 @@ curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate
 # 中日混合
 curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
   -H "Content-Type: application/json" \
-  -d '{"fn_index":0,"data":["[ZH]你好[JA]こんにちは","中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）","派蒙",0.6,0.668,1.2]}'
+  -d '{"fn_index":0,"data":["[ZH]你好[ZH][JA]こんにちは[JA]","中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）","派蒙",0.6,0.668,1.2]}'
 ```
 
 Response: `{"data":["生成成功!",{"name":"/tmp/xxx.wav",...}]}` → download with `curl -s "https://...hf.space/file={name}" -o out.wav`
@@ -501,7 +501,7 @@ Search online with `vits_speakers "name"` or use the tables below. Use Gradio dr
 | `日语` | Japanese — auto `[JA]...[JA]` |
 | `中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）` | Mixed |
 
-Mix: `[ZH]中文[JA]日本語[ZH]又是中文`
+Mix: `[ZH]中文[ZH][JA]日本語[JA]` (each language block wrapped with opening+closing markers)
 
 ## Whisper Voice
 
@@ -551,13 +551,19 @@ Route by passing `voice=ayaka-jp` (or other key). Standard speakers still use th
 
 ## Go CLI (vits-tts)
 
-Pre-compiled binary for agent use — single binary, no runtime dependencies (static build with `CGO_ENABLED=0`).
+Pre-compiled static binary (`vits-tts`) bundled in this skill directory. Ready to use immediately — no build step needed.
+
+```bash
+# Direct use from skill directory
+./vits-tts "こんにちは、旅人さん"
+
+# Or build from source
+cd vits-hf2api-go && CGO_ENABLED=0 go build -ldflags="-s -w" -o vits-tts .
+```
 
 ### Quick Start
 
 ```bash
-cd vits-hf2api-go && go build -ldflags="-s -w" -o vits-tts .
-
 # Default: 神里绫华（龟龟）[早見沙織], mix language, auto-named output
 ./vits-tts "こんにちは、旅人さん"
 
@@ -596,7 +602,7 @@ Default: `神里绫华（龟龟）` (早見沙織 / Hayami Saori — Kamisato Ay
 ./vits-tts --list-languages    # show available options
 ```
 
-Mix format: `[ZH]中文部分[JA]日本語部分[ZH]中文再次`
+Mix format: `[ZH]中文部分[ZH][JA]日本語部分[JA]` (each language block wrapped with matching markers)
 
 ### Voice Parameters
 
