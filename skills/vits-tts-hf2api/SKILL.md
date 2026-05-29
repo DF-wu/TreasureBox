@@ -48,25 +48,25 @@ ikechan8370（无需 session_hash）→ AHJoong（需 session_hash）→ OldSeco
 ### ikechan8370（主要，無需 session_hash）
 
 ```bash
-# 中文 + 派蒙
+# JP voice + 日语神里绫华（早见沙织）
 curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
   -H "Content-Type: application/json" \
-  -d '{"fn_index":0,"data":["你好旅行者！","中文","派蒙",0.6,0.668,1.2]}'
+  -d '{"fn_index":0,"data":["おはようございます","日语","日语神里绫华（早见沙织）",0.6,0.668,1.2]}'
 
-# 日语 + 神里绫华（早見沙織）
+# JP voice + 日语甘雨（上田丽奈）
 curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
   -H "Content-Type: application/json" \
-  -d '{"fn_index":0,"data":["おはようございます","日语","神里绫华（龟龟）",0.6,0.668,1.2]}'
+  -d '{"fn_index":0,"data":["ふわぁ…朝ですか…","日语","日语甘雨（上田丽奈）",0.6,0.668,1.2]}'
 
-# 日语 + 甘雨（上田麗奈）
+# JP voice + 日语胡桃（高桥李依）
 curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
   -H "Content-Type: application/json" \
-  -d '{"fn_index":0,"data":["ふわぁ…朝ですか…","日语","甘雨（椰羊）",0.6,0.668,1.2]}'
+  -d '{"fn_index":0,"data":["いらっしゃい！","日语","日语胡桃（高桥李依）",0.6,0.668,1.2]}'
 
-# 中日混合
+# 中日混合 + JP voice
 curl -sX POST "https://ikechan8370-vits-uma-genshin-honkai.hf.space/api/generate/" \
   -H "Content-Type: application/json" \
-  -d '{"fn_index":0,"data":["[ZH]你好[ZH][JA]こんにちは[JA]","中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）","派蒙",0.6,0.668,1.2]}'
+  -d '{"fn_index":0,"data":["[ZH]你好[ZH][JA]こんにちは[JA]","中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）","日语神里绫华（早见沙织）",0.6,0.668,1.2]}'
 ```
 
 Response: `{"data":["生成成功!",{"name":"/tmp/xxx.wav",...}]}` → download with `curl -s "https://...hf.space/file={name}" -o out.wav`
@@ -663,40 +663,43 @@ Pre-compiled static binary (`vits-tts`) bundled in this skill directory. Ready t
 
 ```bash
 # Direct use from skill directory
-./vits-tts "こんにちは、旅人さん"
+./vits-tts "おはよう、旅人さん"
 
 # Or build from source
-cd vits-tts-hf2api/src/go && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../vits-tts ./cmd/vits-tts/
+cd src/go && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../vits-tts ./cmd/vits-tts/
 ```
 
 ### Quick Start
 
 ```bash
-# Default: 神里绫华（龟龟）[早見沙織], mix language, auto-named output
+# Default: 日语神里绫华（早见沙织）[Hayami Saori], mix language
 ./vits-tts "こんにちは、旅人さん"
 
-# Specify speaker (Chinese name, alias, or Gradio dropdown string)
-./vits-tts "你好世界！" -s 派蒙 -l zh -o paimon.wav
+# JP voice + seiyuu named
+./vits-tts "おやすみなさい" -s 日语甘雨（上田丽奈） -l ja
 
-# Use English alias
+# Use alias (ayaka → 日语神里绫华)
 ./vits-tts "やあ" -s ayaka -l ja
+
+# Male JP voice
+./vits-tts "契約の時だ" -s 日语钟离（前野智昭） -l ja
 ```
 
 ### Speaker Resolution
 
 Accepts three formats (resolved in order):
-1. **Chinese short name**: `神里绫华`, `甘雨`, `黄泉`
-2. **English/romaji alias**: `ayaka`, `rem`, `hutao`, `keqing`
-3. **Exact Gradio dropdown string**: `神里绫华（龟龟）`, `甘雨（椰羊）`
+1. **Exact Gradio dropdown string**: `日语神里绫华（早见沙织）`, `日语甘雨（上田丽奈）`, `日语钟离（前野智昭）`
+2. **Chinese short name**: `神里绫华`, `甘雨`, `钟离`, `胡桃`
+3. **English/romaji alias**: `ayaka`, `ganyu`, `hutao`, `keqing`
 
-Default: `神里绫华（龟龟）` (早見沙織 / Hayami Saori — Kamisato Ayaka, Genshin Impact)
+Default: `日语神里绫华（早见沙织）` (早見沙織 / Hayami Saori — Kamisato Ayaka JP voice)
 
 ```bash
 # Discovery
-./vits-tts --list-speakers              # all 491 named characters
-./vits-tts --search-speakers 神里        # substring search (name or alias)
-./vits-tts --search-speakers ayaka       # finds 神里绫华
-```
+./vits-tts --list-speakers              # all speakers
+./vits-tts --search-speakers 日语        # find all JP voices
+./vits-tts --search-speakers ayaka       # find 日语神里绫华
+./vits-tts --search-speakers 上田        # find by seiyuu name
 
 ### Language
 
@@ -722,11 +725,11 @@ Mix format: `[ZH]中文部分[ZH][JA]日本語部分[JA]` (each language block w
 
 ```bash
 # Whisper mode (soft voice) — preset for noise=0.3, length=1.4
-./vits-tts "夜深了呢…该休息了" -s 甘雨 --whisper
+./vits-tts "ふわぁ…朝ですか…" -s 日语甘雨（上田丽奈） --whisper
 
 # Speed control — maps to length_scale = 1.0 / speed
-./vits-tts "速く話します" -s ayaka -l ja --speed 1.8    # faster
-./vits-tts "ゆっくり話します" -s ayaka -l ja --speed 0.7  # slower
+./vits-tts "早く話します！" -s 日语胡桃（高桥李依） -l ja --speed 1.8    # faster
+./vits-tts "ゆっくり話します…" -s ayaka -l ja --speed 0.7                 # slower
 
 # Manual parameter control
 ./vits-tts "text" --noise-scale 0.3 --length-scale 1.4    # manual whisper
@@ -758,7 +761,7 @@ Both limits count Unicode characters (runes), not bytes. CJK text is truncated c
 
 ```bash
 # Use a specific HuggingFace Space directly (skips retry chain)
-./vits-tts "text" --url https://my-custom-space.hf.space
+./vits-tts "契約の時だ" -s 日语钟离（前野智昭） -l ja --url https://my-custom-space.hf.space
 
 # Force WebSocket fallback
 ./vits-tts "text" --url wss://zomehwh-vits-uma-genshin-honkai.hf.space
@@ -785,7 +788,7 @@ zomehwh (WebSocket, 100 char limit)
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-t, --text` | string | (positional) | Text to synthesize (can also pass as first positional arg) |
-| `-s, --speaker` | string | `神里绫华（龟龟）` | Speaker: Chinese name, alias, or Gradio dropdown string |
+| `-s, --speaker` | string | `日语神里绫华（早见沙织）` | Speaker: JP voice, CN name, or alias |
 | `-l, --language` | string | `mix` | Language: `zh`, `ja`, or `mix` |
 | `-o, --output` | string | auto-derived | Output WAV file path |
 | `--noise-scale` | float | `0.6` | Noise scale (0.1–1.0) |
@@ -796,8 +799,8 @@ zomehwh (WebSocket, 100 char limit)
 | `--timeout` | duration | `2m0s` | Request timeout (e.g. `30s`, `1m`) |
 | `--url` | string | — | Override upstream base URL (skips retry chain) |
 | `-q, --quiet` | bool | false | Suppress info messages (errors still go to stderr) |
-| `--list-speakers` | bool | — | Print all 491 speaker names and exit |
-| `--search-speakers` | string | — | Search speakers by substring (name or alias) and exit |
+| `--list-speakers` | bool | — | Print all speaker names and exit |
+| `--search-speakers` | string | — | Search speakers by substring (name, alias, or seiyuu) and exit |
 | `--list-languages` | bool | — | Print language options and exit |
 
 ### Troubleshooting
@@ -809,3 +812,23 @@ zomehwh (WebSocket, 100 char limit)
 | `context deadline exceeded` | HF Space cold start (20–60s) or slow GPU | Increase `--timeout 3m` |
 | Small WAV file (<2KB) | Upstream returned error page as "audio" | Check if Space is awake; try different upstream with `--url` |
 | WS fallback: short audio | Text truncated to 100 chars | Use shorter text or wait for REST upstream to recover |
+
+## Dev: Updating Speakers
+
+Speaker data lives in `references/vits_speakers.json` (single source of truth). Both SKILL tables and Go binary read from this file. To update from upstream:
+
+```bash
+# Fetch latest speaker list from HF Space
+python3 update_speakers.py
+
+# Rebuild binary
+cd src/go && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../vits-tts ./cmd/vits-tts/
+```
+
+The update script:
+- Pulls `/config` from ikechan8370 HF Space
+- Extracts the speaker dropdown choices (component id=13)
+- Generates aliases (auto from Gradio names + hard-coded romaji map)
+- Writes `references/vits_speakers.json`
+
+Alias format in JSON: `{"ayaka": "日语神里绫华（早见沙织）", ...}`. To add a new alias, edit the `HARD_ALIASES` dict in `update_speakers.py` and re-run.
