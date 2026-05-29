@@ -1,5 +1,5 @@
 ---
-name: vits-hf2api
+name: vits-tts-hf2api
 description: "VITS anime/game character TTS (800+ voices from Genshin, Star Rail, Uma Musume, Vocaloid, Fate, SAO, Re:Zero, Demon Slayer, AOT, etc.) via HuggingFace Spaces. Use when you need character voice synthesis - call directly with copy-paste bash/Python functions. Trigger on any anime voice, game character TTS, character name, seiyuu mention, or voice synthesis request."
 ---
 
@@ -666,7 +666,7 @@ Pre-compiled static binary (`vits-tts`) bundled in this skill directory. Ready t
 ./vits-tts "こんにちは、旅人さん"
 
 # Or build from source
-cd vits-hf2api && CGO_ENABLED=0 go build -ldflags="-s -w" -o vits-tts ./cmd/vits-tts/
+cd vits-tts-hf2api/src/go && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../../vits-tts ./cmd/vits-tts/
 ```
 
 ### Quick Start
