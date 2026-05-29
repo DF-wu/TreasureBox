@@ -22,7 +22,7 @@ description: "VITS anime/game character TTS (800+ voices from Genshin, Star Rail
 - ❌ Integer IDs (Gradio dropdown index ≠ SPEAKERS dict value)
 - ❌ `"神里綾華"` (traditional Chinese 綾 ≠ simplified 绫 in dropdown)
 - `resolve_speaker_gradio()` handles string-to-dropdown resolution
-- REST = int ID（旧版已弃用、现在全部用 dropdown 字串）
+- All API calls now use Gradio dropdown string (integer IDs deprecated)
 
 ### Language: Gradio dropdown values
 
@@ -116,7 +116,7 @@ async def ws_tts(text, lang, speaker):
 vits_tts() {
   # Usage: vits_tts "text" [speaker] [lang] [noise] [output]
   local text="${1:?Usage: vits_tts <text> [speaker] [lang] [noise] [output]}"
-  local speaker="${2:-派蒙}"
+  local speaker="${2:-神里绫华（龟龟）}"
   local lang="${3:-中文}"
   local noise="${4:-0.6}"
   local out="${5:-vits_output.wav}"
@@ -135,7 +135,7 @@ print(d['name'] if isinstance(d,dict) else d)")
   return 1
 }
 
-# vits_tts "你好旅行者！"                          # 派蒙, 中文
+# vits_tts "你好旅行者！"                          # 神里绫华, 中文
 # vits_tts "おやすみなさい" "神里绫华（龟龟）" "日语"  # 神里绫华, 日语
 # vits_tts "運命を切り開く" "黄泉" "日语"              # 黄泉, 日语
 # vits_tts "夜深了呢…" "甘雨（椰羊）" "中文" 0.3 ganyu.wav  # 甘雨 whisper
@@ -169,20 +169,21 @@ import aiohttp, json, asyncio, base64, random, string
 REST = "https://ikechan8370-vits-uma-genshin-honkai.hf.space"
 WS   = "wss://zomehwh-vits-uma-genshin-honkai.hf.space/queue/join"
 
-async def vits_tts(text: str, speaker_id: int = 0, lang: str = "中文",
+async def vits_tts(text: str, speaker: str = "神里绫华（龟龟）", lang: str = "中文",
                     noise: float = 0.6, nsw: float = 0.668, ls: float = 1.2) -> bytes:
-    """Primary: REST API (500 chars, integer speaker ID). Returns WAV bytes."""
+    """Primary: REST API (500 chars, Gradio dropdown speaker string). Returns WAV bytes."""
     async with aiohttp.ClientSession() as s:
         async with s.post(f"{REST}/api/generate/",
-                json={"data": [text, lang, speaker_id, noise, nsw, ls]}) as r:
+                json={"data": [text, lang, speaker, noise, nsw, ls]}) as r:
             result = await r.json()
         if "error" in result:
             raise RuntimeError(result["error"])
-        path = result["data"][1]
+        file_info = result["data"][1]
+        path = file_info["name"] if isinstance(file_info, dict) else file_info
         async with s.get(f"{REST}/file={path}") as r:
             return await r.read()
 
-async def vits_tts_ws(text: str, speaker: str = "派蒙", lang: str = "中文",
+async def vits_tts_ws(text: str, speaker: str = "神里绫华（龟龟）", lang: str = "中文",
                        noise: float = 0.6, nsw: float = 0.668, ls: float = 1.2) -> bytes:
     """Fallback: WebSocket (100 chars, string speaker name). Requires `websockets` library."""
     import websockets
@@ -203,13 +204,13 @@ async def vits_tts_ws(text: str, speaker: str = "派蒙", lang: str = "中文",
                     return base64.b64decode(data[1].split(",", 1)[1])
                 raise RuntimeError("Unexpected WS output")
 
-async def vits_tts_fallback(text, sid=0, ws_speaker="派蒙", lang="中文", **kw):
+async def vits_tts_fallback(text, speaker="神里绫华（龟龟）", ws_speaker="神里绫华（龟龟）", lang="中文", **kw):
     """REST first, auto-fallback to WebSocket."""
-    try: return await vits_tts(text, sid, lang, **kw)
+    try: return await vits_tts(text, speaker, lang, **kw)
     except: return await vits_tts_ws(text, ws_speaker, lang, **kw)
 
-def vits_tts_sync(text, sid=0, **kw):
-    return asyncio.run(vits_tts(text, sid, **kw))
+def vits_tts_sync(text, speaker="神里绫华（龟龟）", **kw):
+    return asyncio.run(vits_tts(text, speaker, **kw))
 ```
 
 ### Discover speakers (Python)
@@ -230,7 +231,7 @@ async def vits_speakers(search: str = "") -> list:
 
 ## Speaker Catalog
 
-Search online with `vits_speakers "name"` or use the tables below. **REST API uses integer ID; WebSocket fallback uses exact Gradio display string.**
+Search online with `vits_speakers "name"` or use the tables below. Use Gradio dropdown display strings (e.g. `"神里绫华（龟龟）"`) for API calls.
 
 ### 原神 Genshin Impact (HoYoverse, 2020)
 
@@ -511,7 +512,7 @@ Mix: `[ZH]中文[JA]日本語[ZH]又是中文`
 
 ## Gotchas
 
-1. **REST = int ID. WS = exact string.** Don't mix speaker formats.
+1. **Speaker must match Gradio dropdown string exactly.** Use the resolved display name, not integer IDs.
 2. **卡芙カ + 中文 fails** — use `日语`.
 3. **Cold start 20-40s** — first request after Space idle.
 4. **500 chars REST / 100 chars WS** — text truncated on fallback.
@@ -545,3 +546,152 @@ Only retriable errors trigger fallback (timeout, 5xx, connection). Non-retriable
 | `theresa` | 德丽莎 | 中文 | 193 |
 
 Route by passing `voice=ayaka-jp` (or other key). Standard speakers still use the 804-speaker Space.
+
+---
+
+## Go CLI (vits-tts)
+
+Pre-compiled binary for agent use — single binary, no runtime dependencies (static build with `CGO_ENABLED=0`).
+
+### Quick Start
+
+```bash
+cd vits-hf2api-go && go build -ldflags="-s -w" -o vits-tts .
+
+# Default: 神里绫华（龟龟）[早見沙織], mix language, auto-named output
+./vits-tts "こんにちは、旅人さん"
+
+# Specify speaker (Chinese name, alias, or Gradio dropdown string)
+./vits-tts "你好世界！" -s 派蒙 -l zh -o paimon.wav
+
+# Use English alias
+./vits-tts "やあ" -s ayaka -l ja
+```
+
+### Speaker Resolution
+
+Accepts three formats (resolved in order):
+1. **Chinese short name**: `神里绫华`, `甘雨`, `黄泉`
+2. **English/romaji alias**: `ayaka`, `rem`, `hutao`, `keqing`
+3. **Exact Gradio dropdown string**: `神里绫华（龟龟）`, `甘雨（椰羊）`
+
+Default: `神里绫华（龟龟）` (早見沙織 / Hayami Saori — Kamisato Ayaka, Genshin Impact)
+
+```bash
+# Discovery
+./vits-tts --list-speakers              # all 491 named characters
+./vits-tts --search-speakers 神里        # substring search (name or alias)
+./vits-tts --search-speakers ayaka       # finds 神里绫华
+```
+
+### Language
+
+| Flag value | Gradio string sent to API |
+|-----------|--------------------------|
+| `zh` | `中文` |
+| `ja` | `日语` |
+| `mix` (default) | `中日混合（中文用[ZH][ZH]包裹起来，日文用[JA][JA]包裹起来）` |
+
+```bash
+./vits-tts --list-languages    # show available options
+```
+
+Mix format: `[ZH]中文部分[JA]日本語部分[ZH]中文再次`
+
+### Voice Parameters
+
+| Parameter | Default | Range | Whisper preset |
+|-----------|---------|-------|---------------|
+| `--noise-scale` | 0.6 | 0.1–1.0 | 0.3 |
+| `--noise-scale-w` | 0.668 | 0.1–1.0 | 0.668 (unchanged) |
+| `--length-scale` | 1.2 | 0.1–2.0 | 1.4 |
+
+```bash
+# Whisper mode (soft voice) — preset for noise=0.3, length=1.4
+./vits-tts "夜深了呢…该休息了" -s 甘雨 --whisper
+
+# Speed control — maps to length_scale = 1.0 / speed
+./vits-tts "速く話します" -s ayaka -l ja --speed 1.8    # faster
+./vits-tts "ゆっくり話します" -s ayaka -l ja --speed 0.7  # slower
+
+# Manual parameter control
+./vits-tts "text" --noise-scale 0.3 --length-scale 1.4    # manual whisper
+```
+
+### Output
+
+Default filename derived from first 20 alphanumeric/unicode characters of input text:
+- `こんにちは、旅人さん` → `こんにちは旅人さん.wav`
+- `你好世界！` → `你好世界_.wav`
+- `test` → `test.wav`
+- Empty → `vits_output.wav`
+
+```bash
+./vits-tts "text" -o /path/to/output.wav    # explicit path
+./vits-tts "text" -q                          # suppress info output (WAV to stdout would need pipe)
+```
+
+### Text Limits
+
+| Path | Limit | Behavior |
+|------|-------|----------|
+| REST (ikechan8370, AHJoong, OldSecond) | **500 chars** (rune-safe) | Truncated automatically |
+| WebSocket fallback (zomehwh) | **100 chars** (rune-safe) | Truncated automatically in retry layer |
+
+Both limits count Unicode characters (runes), not bytes. CJK text is truncated correctly.
+
+### Upstream Override
+
+```bash
+# Use a specific HuggingFace Space directly (skips retry chain)
+./vits-tts "text" --url https://my-custom-space.hf.space
+
+# Force WebSocket fallback
+./vits-tts "text" --url wss://zomehwh-vits-uma-genshin-honkai.hf.space
+```
+
+### Retry Chain (automatic when no --url)
+
+```
+ikechan8370 (REST, no session_hash)
+  ↓ on timeout/5xx/connection
+AHJoong (REST, session_hash required)
+  ↓ on timeout/5xx/connection
+OldSecond (REST, session_hash required)
+  ↓ on timeout/5xx/connection
+zomehwh (WebSocket, 100 char limit)
+```
+
+- Retries ONLY on: timeout, HTTP 5xx, connection refused/reset, DNS failure
+- **4xx errors fail immediately** — no fallback
+- When sending via `vits-tts` output, "Synthesized via REST" or "Synthesized via WebSocket fallback" indicates which path was used
+
+### Complete Flag Reference
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-t, --text` | string | (positional) | Text to synthesize (can also pass as first positional arg) |
+| `-s, --speaker` | string | `神里绫华（龟龟）` | Speaker: Chinese name, alias, or Gradio dropdown string |
+| `-l, --language` | string | `mix` | Language: `zh`, `ja`, or `mix` |
+| `-o, --output` | string | auto-derived | Output WAV file path |
+| `--noise-scale` | float | `0.6` | Noise scale (0.1–1.0) |
+| `--noise-scale-w` | float | `0.668` | Noise scale width (0.1–1.0) |
+| `--length-scale` | float | `1.2` | Length scale (0.1–2.0) |
+| `--speed` | float | — | Speed override: `length_scale = 1.0 / speed` |
+| `--whisper` | bool | false | Preset: noise=0.3, length=1.4 |
+| `--timeout` | duration | `2m0s` | Request timeout (e.g. `30s`, `1m`) |
+| `--url` | string | — | Override upstream base URL (skips retry chain) |
+| `-q, --quiet` | bool | false | Suppress info messages (errors still go to stderr) |
+| `--list-speakers` | bool | — | Print all 491 speaker names and exit |
+| `--search-speakers` | string | — | Search speakers by substring (name or alias) and exit |
+| `--list-languages` | bool | — | Print language options and exit |
+
+### Troubleshooting
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| `all upstreams failed` | All 4 upstreams down or cold-starting | Retry in 30–60s (HF Spaces sleep when idle) |
+| `unknown speaker 'X'` | Name not in speaker map or alias list | Use `--search-speakers` to find correct name |
+| `context deadline exceeded` | HF Space cold start (20–60s) or slow GPU | Increase `--timeout 3m` |
+| Small WAV file (<2KB) | Upstream returned error page as "audio" | Check if Space is awake; try different upstream with `--url` |
+| WS fallback: short audio | Text truncated to 100 chars | Use shorter text or wait for REST upstream to recover |
