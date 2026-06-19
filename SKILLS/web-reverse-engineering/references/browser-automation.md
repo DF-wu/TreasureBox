@@ -53,6 +53,23 @@ asyncio.run(run())
 - Inconsistent `Accept-Language` vs IP region.
 - Overusing one proxy ASN across all traffic.
 
+## In-Page Fetch (same-origin, passes CF)
+
+To call a Cloudflare-gated same-origin API from an authed browser, run `fetch` **inside the page**:
+
+```python
+data = await page.evaluate(
+    """async (u) => {
+        const r = await fetch(u, {credentials: 'include'});
+        return {status: r.status, body: await r.text()};
+    }""", api_url)
+```
+
+It executes in the real origin → carries cookies + CF clearance and passes exactly like the site's
+own AJAX. `context.request` (APIRequestContext) and curl_cffi do NOT run CF JS and get 403 on gated
+endpoints. Combine with session-cookie injection to map authed APIs — see
+`authenticated-session-mapping.md`.
+
 ## Observability You Need
 
 Track per target:

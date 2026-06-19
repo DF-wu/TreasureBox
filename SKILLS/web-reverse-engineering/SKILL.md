@@ -1,6 +1,6 @@
 ---
 name: web-reverse-engineering
-description: "Universal reverse-engineering guide covering web scraping, API RE, mobile app RE (Android/iOS), JavaScript deobfuscation, protocol analysis (WebSocket/gRPC/custom TCP), and binary RE (WASM, native libraries, desktop apps). Use when you need browser automation, anti-bot evasion, proxy strategy, CAPTCHA handling, traffic interception, or large-scale extraction. Covers curl_cffi/hrequests/rnet, Playwright/Patchright/Camoufox/rebrowser/DrissionPage, Scrapy/Crawlee/Colly/Rod, Frida/objection/jadx, Ghidra/radare2, mitmproxy/Wireshark, Cloudflare/Akamai/DataDome/Kasada patterns, legal frameworks, and production runbooks."
+description: "Universal reverse-engineering guide covering web scraping, API RE, mobile app RE (Android/iOS), JavaScript deobfuscation, protocol analysis (WebSocket/gRPC/custom TCP), and binary RE (WASM, native libraries, desktop apps). Use when you need browser automation, anti-bot evasion, proxy strategy, CAPTCHA handling, authenticated/logged-in API mapping via session-cookie injection (CF-gated SPAs, dashboards, checkin/reward systems), traffic interception, or large-scale extraction. Covers curl_cffi/hrequests/rnet, Playwright/Patchright/Camoufox/rebrowser/DrissionPage, Scrapy/Crawlee/Colly/Rod, Frida/objection/jadx, Ghidra/radare2, mitmproxy/Wireshark, Cloudflare/Akamai/DataDome/Kasada patterns, legal frameworks, and production runbooks."
 ---
 
 # Web Reverse Engineering (Universal)
@@ -19,6 +19,7 @@ The focus is practical: choose the minimum-complexity approach that still works 
 3. Prefer API extraction over DOM scraping whenever possible.
 4. Use prevention-first anti-bot strategy; CAPTCHA solving is last resort.
 5. Understand legal context and risk boundaries. Platform terms are contractual signals, not criminal law.
+6. Behind an auth wall? Inject a real (manually-exported) session before re-implementing login — and verify the session at its source before assuming a code bug. Stale credentials masquerade as broken code.
 
 ## Fast Decision Tree
 
@@ -57,6 +58,10 @@ Target -> What is required?
 
 11) Target is a HuggingFace Space / Gradio app?
     -> Check /config for endpoints → map component IDs to fn params → reproduce via REST/WS/SSE (see Gradio Space playbook below).
+
+12) Data/action is behind login AND Cloudflare (member dashboard, checkin/rewards)?
+    -> Inject a manually-exported session → drive in-page fetch to map the API read-only
+       (see Authenticated Session Mapping playbook below). Don't re-implement the login first.
 ```
 
 ## Common Playbooks
@@ -121,6 +126,24 @@ If the Space has mirrors (forked Spaces), add REST primary + WebSocket fallback 
 - Download: `GET /file=/tmp/gradio/x.wav` → audio bytes
 - Fallback: WebSocket `/queue/join` on forked Space with 100-char limit
 
+### E) "Map a logged-in, Cloudflare-gated SPA (dashboard/checkin/rewards)"
+
+A valid session cookie is a skeleton key — use it to map the authed API instead of re-implementing the login.
+
+1. **Log in by hand once**, export cookies (Cookie-Editor JSON). Keep the session cookie(s).
+2. **Inject** into a stealth browser (`add_cookies`) → `goto(dashboard)` → pass CF once (real top-level nav runs CF JS).
+3. **Confirm auth** via the framework's session endpoint (`/api/auth/session`, `/session/current.json`).
+4. **Enumerate read-only** with **in-page `fetch`** — `page.evaluate(() => fetch(u,{credentials:'include'}))` runs in the real origin and passes CF; `context.request`/curl_cffi do NOT run CF JS and get 403 on gated endpoints.
+5. **Grep the JS bundles** (`/_next/static/*.js`) for `"/api/..."` literals + field names — the SPA page route (`/gas-station/checkin`) is NOT the API route (`/api/checkin`).
+6. **Stay read-only** during recon: GET + grep only, never POST writes / consume quotas. Don't greedily click DOM buttons (broad text matches misclick).
+
+Key sub-techniques:
+- **Cookie names fingerprint the framework/version** — `next-auth.session-token` (NextAuth v4) vs `__Secure-authjs.session-token` (Auth.js v5). A rename usually means a framework upgrade with the SAME endpoints.
+- **Isolate stale-credentials from code bugs FIRST** — inject cookies, hit the login-check endpoint (Discourse `/session/current.json`: 200=auth, 404=anon). "Broken" authed flows are usually dead cookies.
+- **JWT/JWE sessions** (`eyJ...`) self-validate independent of the OAuth upstream → inject for the full TTL (days–weeks). Production hybrid: inject session → skip OAuth if valid, fall back to full login only on cold start.
+
+See `references/authenticated-session-mapping.md` + `scripts/session_probe_template.py`.
+
 ## Anti-Bot Severity Ladder
 
 | Level | Typical signals | Recommended baseline |
@@ -149,6 +172,7 @@ If the Space has mirrors (forked Spaces), add REST primary + WebSocket fallback 
 - `references/proxy-strategies.md`
 - `references/captcha-bypass.md`
 - `references/api-reverse-engineering.md`
+- `references/authenticated-session-mapping.md` — inject a real session to map a CF-gated SPA API (in-page fetch, SPA-route-vs-API, auth-cookie fingerprinting, credential-vs-code isolation)
 - `references/data-extraction.md`
 - `references/legal-ethical.md`
 - `references/emerging-trends.md`

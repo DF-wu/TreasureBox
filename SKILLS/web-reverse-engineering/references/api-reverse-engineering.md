@@ -77,3 +77,10 @@ Mitigation:
 - fallback parser path if API contracts change suddenly
 
 API-first extraction reduces fragility and maintenance cost when done correctly.
+
+## Behind a login + Cloudflare?
+
+If the API is gated by both auth and Cloudflare, don't re-implement the login to map it. Inject a
+manually-exported session and drive the site's own same-origin `fetch` to enumerate endpoints
+read-only. The SPA page route is usually NOT the API route — grep the JS bundles for the real
+`/api/...` paths. See `authenticated-session-mapping.md`.
