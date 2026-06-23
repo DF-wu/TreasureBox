@@ -1,42 +1,36 @@
 # Tavily live inventory
 
 - Family key: `tavily-hikari`
-- Tool count: **6**
+- Tool count: **5**
 
 > Generated from the live MetaMCP endpoint. Keep manual guidance in the non-generated family docs; use this file for exact tool names and parameter hints.
 
 ## `tavily-hikari__tavily_crawl`
 
-- **What it does:** Crawl a website starting from a URL. Extracts content from pages with configurable depth and breadth.
+- **What it does:** Crawl a site with Tavily
 - **Required params:** `url`
-- **Optional params (first 8):** `max_depth`, `max_breadth`, `limit`, `instructions`, `select_paths`, `select_domains`, `allow_external`, `extract_depth`
+- **Optional params (first 8):** `allow_external`, `extract_depth`, `format`, `include_favicon`, `instructions`, `limit`, `max_breadth`, `max_depth`
 
 ## `tavily-hikari__tavily_extract`
 
-- **What it does:** Extract content from URLs. Returns raw page content in markdown or text format.
+- **What it does:** Extract page content with Tavily
 - **Required params:** `urls`
-- **Optional params (first 5):** `extract_depth`, `include_images`, `format`, `include_favicon`, `query`
+- **Optional params (first 5):** `extract_depth`, `format`, `include_favicon`, `include_images`, `query`
 
 ## `tavily-hikari__tavily_map`
 
-- **What it does:** Map a website's structure. Returns a list of URLs found starting from the base URL.
+- **What it does:** Map a site with Tavily
 - **Required params:** `url`
-- **Optional params (first 7):** `max_depth`, `max_breadth`, `limit`, `instructions`, `select_paths`, `select_domains`, `allow_external`
+- **Optional params (first 7):** `allow_external`, `instructions`, `limit`, `max_breadth`, `max_depth`, `select_domains`, `select_paths`
 
 ## `tavily-hikari__tavily_research`
 
-- **What it does:** Perform comprehensive research on a given topic or question. Use this tool when you need to gather information from multiple sources, including web pages, documents, and other resources, to answer a question or complete a task. Returns a detailed response based on the research findings. Rate limit: 20 requests per minute.
+- **What it does:** Run Tavily research
 - **Required params:** `input`
 - **Optional params (first 1):** `model`
 
 ## `tavily-hikari__tavily_search`
 
-- **What it does:** Search the web for current information on any topic. Use for news, facts, or data beyond your knowledge cutoff. Returns snippets and source URLs.
+- **What it does:** Search the web with Tavily
 - **Required params:** `query`
-- **Optional params (first 8):** `max_results`, `search_depth`, `topic`, `time_range`, `include_images`, `include_image_descriptions`, `include_raw_content`, `include_domains`
-
-## `tavily-hikari__tavily_skill`
-
-- **What it does:** Search documentation for any library, API, or tool. Returns relevant, structured documentation chunks assembled for your specific query. When working with a specific library, always pass the library name for best results.
-- **Required params:** `query`
-- **Optional params (first 5):** `library`, `language`, `task`, `context`, `max_tokens`
+- **Optional params (first 8):** `country`, `end_date`, `exact_match`, `exclude_domains`, `include_domains`, `include_favicon`, `include_image_descriptions`, `include_images`

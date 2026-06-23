@@ -2,7 +2,7 @@
 
 # DOCS_AND_RESEARCH
 
-This family combines **Context7**, **DeepWiki**, and **Tavily**.
+This family group combines **Context7**, **DeepWiki**, and **Tavily**.
 
 ## Which one to use
 
@@ -21,6 +21,13 @@ This family combines **Context7**, **DeepWiki**, and **Tavily**.
 - `read_wiki_structure` is the lightest way to see what topics exist.
 - `read_wiki_contents` is for actual wiki/topic content.
 - `ask_question` is the best tool when the user wants an answer synthesized from repo knowledge rather than raw pages.
+
+## Tavily rules
+
+- `tavily_search` is the normal starting point for live web queries.
+- `tavily_extract` is for pulling page content after you already know the URLs.
+- `tavily_crawl` and `tavily_map` are for site-structure discovery.
+- `tavily_research` is the heavier option when you need a synthesized, multi-source answer.
 
 ## Use the generated inventories when you need exact tool names / parameters
 

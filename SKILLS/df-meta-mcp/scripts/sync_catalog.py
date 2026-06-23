@@ -6,58 +6,39 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
-ENDPOINT = "https://metamcp.dfder.tw/metamcp/chatbot/mcp"
-NAME = "dfmcp"
-
+DEFAULT_ENDPOINT = "https://metamcp.dfder.tw/metamcp/chatbot/mcp"
+DEFAULT_NAME = "dfmcp"
 FAMILY_TITLES = {
     "github_mcp": "GitHub",
     "ticktick": "TickTick",
     "context7": "Context7",
     "deepwiki": "DeepWiki",
+    "hackmd": "HackMD",
     "tavily-hikari": "Tavily",
     "mcp-sequentialthinking-tools": "Sequential Thinking",
 }
 
 
 def main() -> int:
+    endpoint = os.environ.get("DF_METAMCP_ENDPOINT", DEFAULT_ENDPOINT)
+    name = os.environ.get("DF_METAMCP_NAME", DEFAULT_NAME)
     skill_root = Path(__file__).resolve().parent.parent
     references_dir = skill_root / "references"
     references_dir.mkdir(parents=True, exist_ok=True)
 
-    mcporter_cmd = resolve_mcporter_cmd()
-
-    with tempfile.NamedTemporaryFile("w+", encoding="utf-8", delete=False) as tmp:
-        tmp_path = Path(tmp.name)
-
-    try:
-        with tmp_path.open("w", encoding="utf-8") as handle:
-            subprocess.run(
-                [*mcporter_cmd, "list", "--http-url", ENDPOINT, "--name", NAME, "--json"],
-                check=True,
-                stdout=handle,
-                text=True,
-            )
-
-        data = json.loads(tmp_path.read_text(encoding="utf-8"))
-    finally:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-    tools = data.get("tools", [])
+    tools = fetch_tools(endpoint=endpoint, name=name)
     grouped: dict[str, list[dict[str, Any]]] = {}
     for tool in tools:
-        family = tool_family(tool["name"])
+        family = tool_family(str(tool.get("name", "")))
         grouped.setdefault(family, []).append(tool)
 
     summary_lines = [
         "# MetaMCP live catalog",
         "",
-        f"- Endpoint: `{ENDPOINT}`",
+        f"- Endpoint: `{endpoint}`",
         f"- Tool count: **{len(tools)}**",
         "",
         "## Families",
@@ -65,7 +46,7 @@ def main() -> int:
     ]
 
     for family in sorted(grouped):
-        tools_for_family = sorted(grouped[family], key=lambda t: t["name"])
+        tools_for_family = sorted(grouped[family], key=lambda t: str(t.get("name", "")))
         title = FAMILY_TITLES.get(family, family)
         generated_name = generated_file_name(family)
         summary_lines.append(
@@ -83,11 +64,37 @@ def main() -> int:
         ]
     )
     (references_dir / "catalog.generated.md").write_text(
-        "\n".join(summary_lines) + "\n", encoding="utf-8"
+        "\n".join(summary_lines) + "\n",
+        encoding="utf-8",
     )
 
     print(f"Wrote live catalog for {len(tools)} tools to {references_dir}")
     return 0
+
+
+def fetch_tools(*, endpoint: str, name: str) -> list[dict[str, Any]]:
+    mcporter_cmd = resolve_mcporter_cmd()
+    skill_root = Path(__file__).resolve().parent.parent
+    output_path = skill_root / ".tmp.mcporter-list.json"
+    try:
+        with output_path.open("w", encoding="utf-8") as handle:
+            subprocess.run(
+                [*mcporter_cmd, "list", "--http-url", endpoint, "--name", name, "--json"],
+                check=True,
+                stdout=handle,
+                text=True,
+            )
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+    finally:
+        output_path.unlink(missing_ok=True)
+    tools = data.get("tools", [])
+    if not isinstance(tools, list):
+        raise SystemExit("Unexpected mcporter list JSON: missing tools array")
+    normalized: list[dict[str, Any]] = []
+    for item in tools:
+        if isinstance(item, dict):
+            normalized.append(item)
+    return normalized
 
 
 def generated_file_name(family: str) -> str:
@@ -98,7 +105,10 @@ def generated_file_name(family: str) -> str:
         "deepwiki": "deepwiki.generated.md",
         "mcp-sequentialthinking-tools": "sequentialthinking.generated.md",
     }
-    return mapping.get(family, re.sub(r"[^a-z0-9]+", "-", family.lower()).strip("-") + ".generated.md")
+    return mapping.get(
+        family,
+        re.sub(r"[^a-z0-9]+", "-", family.lower()).strip("-") + ".generated.md",
+    )
 
 
 def tool_family(name: str) -> str:
@@ -148,7 +158,7 @@ def optional_params(tool: dict[str, Any], limit: int = 8) -> list[str]:
     if not isinstance(props, dict):
         return []
     required = set(required_params(tool))
-    optionals = [k for k in props.keys() if k not in required]
+    optionals = [str(key) for key in props.keys() if key not in required]
     return optionals[:limit]
 
 
@@ -164,11 +174,11 @@ def write_family_doc(path: Path, family: str, title: str, tools: list[dict[str, 
     ]
 
     for tool in tools:
-        name = tool.get("name", "")
-        summary = first_line(tool.get("description", "")) or "(no description)"
+        name = str(tool.get("name", ""))
+        summary = first_line(str(tool.get("description", ""))) or "(no description)"
         req = required_params(tool)
         opt = optional_params(tool)
-        notes = important_notes(tool.get("description", ""))
+        notes = important_notes(str(tool.get("description", "")))
 
         lines.append(f"## `{name}`")
         lines.append("")
@@ -188,8 +198,9 @@ def write_family_doc(path: Path, family: str, title: str, tools: list[dict[str, 
 
 
 def shutil_which(name: str) -> str | None:
-    paths = os.environ.get("PATH", "").split(os.pathsep)
-    for base in paths:
+    for base in os.environ.get("PATH", "").split(os.pathsep):
+        if not base:
+            continue
         candidate = Path(base) / name
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
@@ -200,9 +211,11 @@ def resolve_mcporter_cmd() -> list[str]:
     mcporter = shutil_which("mcporter")
     if mcporter:
         return [mcporter]
+    if shutil_which("bunx"):
+        return ["bunx", "-y", "mcporter"]
     if shutil_which("npx"):
         return ["npx", "-y", "mcporter"]
-    raise SystemExit("Neither mcporter nor npx is available in PATH")
+    raise SystemExit("Neither mcporter, bunx, nor npx is available in PATH")
 
 
 if __name__ == "__main__":

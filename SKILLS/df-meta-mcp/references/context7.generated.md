@@ -11,7 +11,7 @@
 - **Required params:** `libraryId`, `query`
 - **Important notes:**
   - You must call 'Resolve Context7 Library ID' tool first to obtain the exact Context7-compatible library ID required to use this tool, UNLESS the user explicitly provides a library ID in the format '/org/project' or '/org/project/version' in their query.
-  - IMPORTANT: Do not call this tool more than 3 times per question. If you cannot find what you need after 3 calls, use the best information you have.
+  - Do not call this tool more than 3 times per question.
 
 ## `context7__resolve-library-id`
 

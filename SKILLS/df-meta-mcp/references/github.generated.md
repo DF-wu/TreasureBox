@@ -21,12 +21,6 @@
 - **What it does:** Add a reply to an existing pull request comment. This creates a new comment that is linked as a reply to the specified comment.
 - **Required params:** `owner`, `repo`, `pullNumber`, `commentId`, `body`
 
-## `github_mcp__assign_copilot_to_issue`
-
-- **What it does:** Assign Copilot to a specific issue in a GitHub repository.
-- **Required params:** `owner`, `repo`, `issue_number`
-- **Optional params (first 2):** `base_ref`, `custom_instructions`
-
 ## `github_mcp__create_branch`
 
 - **What it does:** Create a new branch in a GitHub repository
@@ -46,13 +40,7 @@
 
 - **What it does:** Create a new pull request in a GitHub repository.
 - **Required params:** `owner`, `repo`, `title`, `head`, `base`
-- **Optional params (first 3):** `body`, `draft`, `maintainer_can_modify`
-
-## `github_mcp__create_pull_request_with_copilot`
-
-- **What it does:** Delegate a task to GitHub Copilot coding agent to perform in the background. The agent will create a pull request with the implementation. You should use this tool if the user asks to create a pull request to perform a specific task, or if the user asks Copilot to do something.
-- **Required params:** `owner`, `repo`, `problem_statement`, `title`
-- **Optional params (first 1):** `base_ref`
+- **Optional params (first 4):** `body`, `draft`, `maintainer_can_modify`, `reviewers`
 
 ## `github_mcp__create_repository`
 
@@ -75,12 +63,7 @@
 
 - **What it does:** Get details for a commit from a GitHub repository
 - **Required params:** `owner`, `repo`, `sha`
-- **Optional params (first 3):** `include_diff`, `page`, `perPage`
-
-## `github_mcp__get_copilot_job_status`
-
-- **What it does:** Get the status of a GitHub Copilot coding agent job. Use this to check if a previously submitted task has completed and to get the pull request URL once it's created. Provide the job ID (from create_pull_request_with_copilot) or pull request number (from assign_copilot_to_issue), or any pull request you want agent sessions for.
-- **Required params:** `owner`, `repo`, `id`
+- **Optional params (first 3):** `detail`, `page`, `perPage`
 
 ## `github_mcp__get_file_contents`
 
@@ -134,7 +117,7 @@
 
 - **What it does:** Create a new or update an existing issue in a GitHub repository.
 - **Required params:** `method`, `owner`, `repo`
-- **Optional params (first 8):** `assignees`, `body`, `duplicate_of`, `issue_number`, `labels`, `milestone`, `state`, `state_reason`
+- **Optional params (first 8):** `assignees`, `body`, `duplicate_of`, `issue_fields`, `issue_number`, `labels`, `milestone`, `state`
 
 ## `github_mcp__list_branches`
 
@@ -146,18 +129,25 @@
 
 - **What it does:** Get list of commits of a branch in a GitHub repository. Returns at least 30 results per page by default, but can return more if specified using the perPage parameter (up to 100).
 - **Required params:** `owner`, `repo`
-- **Optional params (first 4):** `author`, `page`, `perPage`, `sha`
+- **Optional params (first 7):** `author`, `page`, `path`, `perPage`, `sha`, `since`, `until`
+
+## `github_mcp__list_issue_fields`
+
+- **What it does:** List issue fields for a repository or organization. Returns field definitions including name, type (text, number, date, single_select), and for single_select fields the list of valid option names. When repo is omitted, returns org-level fields directly.
+- **Required params:** `owner`
+- **Optional params (first 1):** `repo`
 
 ## `github_mcp__list_issue_types`
 
-- **What it does:** List supported issue types for repository owner (organization).
+- **What it does:** List supported issue types for a repository or its owner organization. When repo is omitted, returns org-level issue types directly.
 - **Required params:** `owner`
+- **Optional params (first 1):** `repo`
 
 ## `github_mcp__list_issues`
 
 - **What it does:** List issues in a GitHub repository. For pagination, use the 'endCursor' from the previous response's 'pageInfo' in the 'after' parameter.
 - **Required params:** `owner`, `repo`
-- **Optional params (first 7):** `after`, `direction`, `labels`, `orderBy`, `perPage`, `since`, `state`
+- **Optional params (first 8):** `after`, `direction`, `field_filters`, `labels`, `orderBy`, `perPage`, `since`, `state`
 
 ## `github_mcp__list_pull_requests`
 
@@ -172,6 +162,12 @@
 - **What it does:** List releases in a GitHub repository
 - **Required params:** `owner`, `repo`
 - **Optional params (first 2):** `page`, `perPage`
+
+## `github_mcp__list_repository_collaborators`
+
+- **What it does:** List collaborators of a GitHub repository. Results are paginated; the response includes `nextPage`, `prevPage`, `firstPage`, and `lastPage` fields. To get the next page, use the `nextPage` value as the `page` parameter.
+- **Required params:** `owner`, `repo`
+- **Optional params (first 3):** `affiliation`, `page`, `perPage`
 
 ## `github_mcp__list_tags`
 
@@ -189,13 +185,13 @@
 
 - **What it does:** Get information on a specific pull request in GitHub repository.
 - **Required params:** `method`, `owner`, `repo`, `pullNumber`
-- **Optional params (first 2):** `page`, `perPage`
+- **Optional params (first 3):** `after`, `page`, `perPage`
 
 ## `github_mcp__pull_request_review_write`
 
 - **What it does:** Create and/or submit, delete review of a pull request.
 - **Required params:** `method`, `owner`, `repo`, `pullNumber`
-- **Optional params (first 3):** `body`, `commitID`, `event`
+- **Optional params (first 4):** `body`, `commitID`, `event`, `threadId`
 
 ## `github_mcp__push_files`
 
@@ -217,6 +213,12 @@
 ## `github_mcp__search_code`
 
 - **What it does:** Fast and precise code search across ALL GitHub repositories using GitHub's native search engine. Best for finding exact symbols, functions, classes, or specific code patterns.
+- **Required params:** `query`
+- **Optional params (first 4):** `order`, `page`, `perPage`, `sort`
+
+## `github_mcp__search_commits`
+
+- **What it does:** Search for commits across GitHub repositories using GitHub's commit search syntax. Useful for finding specific changes, authors, or messages across one or many repositories. Searches the default branch only.
 - **Required params:** `query`
 - **Optional params (first 4):** `order`, `page`, `perPage`, `sort`
 
