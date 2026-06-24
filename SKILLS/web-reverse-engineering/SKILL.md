@@ -62,6 +62,18 @@ Target -> What is required?
 12) Data/action is behind login AND Cloudflare (member dashboard, checkin/rewards)?
     -> Inject a manually-exported session → drive in-page fetch to map the API read-only
        (see Authenticated Session Mapping playbook below). Don't re-implement the login first.
+
+13) Need to automate login for scheduled tasks (checkin, scraping, monitoring)?
+    -> Use browser automation with email/password → persistent browser profile → session validation
+       (see Automated Login Solver playbook). Prioritize credentials over cookie injection.
+
+14) WAF blocks HTTP requests even with correct cookies?
+    -> Use dual-cookie strategy: user session (long-lived) + WAF cookie (ephemeral, harvested fresh)
+       (see WAF Bypass Techniques). Browser navigation triggers WAF JS, then merge cookies for httpx.
+
+15) Need reliable proxy rotation for production scraper?
+    -> Deploy Clash/Mihomo with subscription support → automatic health checking → url-test mode
+       (see Proxy Rotation Strategies). Geo-match proxy location with target locale.
 ```
 
 ## Common Playbooks
@@ -144,16 +156,128 @@ Key sub-techniques:
 
 See `references/authenticated-session-mapping.md` + `scripts/session_probe_template.py`.
 
+### F) "Automate login flow for scheduled tasks (daily checkin, monitoring)"
+
+For production automation, email/password login beats cookie injection:
+- Session cookies expire unpredictably (hours to weeks)
+- Manual cookie export doesn't scale across multiple accounts
+- Login automation is more reliable long-term
+
+**Architecture**: Browser profile persistence + session validation + credential-first fallback
+
+```python
+# Prioritize email/password over stale cookies
+if account.has_login_credentials():
+    result = await login_with_credentials(account.email, account.password)
+    if result:
+        return result.cookies, result.api_user  # Fresh session + user ID
+    else:
+        raise Exception("Login failed, will not use stale cookies")
+else:
+    # Fallback: session cookies only if no credentials provided
+    return await login_with_session_cookies(account.cookies)
+```
+
+**Key techniques**:
+1. **WAF pass before login** — Navigate homepage first (3-5s warmup), then login page. Wait for WAF ready (no "verify you are human" text).
+2. **Popup dismissal** — Inject MutationObserver script to auto-close announcement modals, cookie consent, promotional popups.
+3. **Multi-strategy form discovery** — Try selector match → icon button click → tab switching → JS-based greedy search.
+4. **Framework-aware credential injection** — Use JS property setter + event dispatch to trigger React/Vue onChange handlers.
+5. **API interception for validation** — Navigate `/console`, intercept `/api/user/self` response, extract user ID for API headers.
+6. **Persistent browser profiles** — Reuse profile across runs, skip login if session still valid (faster, less detectable).
+
+See `references/automated-login-solver.md` for production-grade implementation with error handling, screenshots, and retry logic.
+
+### G) "Bypass WAF for API calls (Cloudflare, Aliyun, Akamai)"
+
+**Problem**: WAF challenge cookies are cryptographically bound to TLS fingerprint, IP, and timestamp. Cannot inject from browser devtools.
+
+**Solution**: Dual-cookie strategy — harvest WAF cookie fresh per request, merge with long-lived session cookie.
+
+```python
+# Harvest ephemeral WAF cookies via headless browser
+waf_cookies = await get_waf_cookies_with_browser(
+    'https://site.com/login',
+    required_cookie_names=['acw_tc', 'acw_sc__v2', 'cdn_sec_tc'],
+    use_proxy=True
+)
+
+# Merge with user session cookie
+all_cookies = {'session': user_session, **waf_cookies}
+
+# Make API request with httpx
+async with httpx.AsyncClient(http2=True) as client:
+    client.cookies.update(all_cookies)
+    response = await client.post('/api/user/sign_in')
+```
+
+**WAF-specific patterns**:
+- **Cloudflare**: `cf_clearance` cookie (30 min TTL), use `curl_cffi` with `impersonate='chrome110'` for HTTP-only
+- **Aliyun**: `acw_tc` (2-5 min TTL) for simple challenge, `acw_sc__v2` requires sliding CAPTCHA solver
+- **Akamai**: `_abck` sensor data (device fingerprinting, requires undetected-chromedriver + realistic behavior)
+
+**Optimization**: Cache WAF cookies for 1-3 minutes to avoid repeated browser launches. Test expiry empirically.
+
+See `references/waf-bypass-techniques.md` for provider-specific bypass patterns and debugging checklist.
+
+### H) "Deploy production proxy rotation (health checking, failover)"
+
+**Architecture**: Clash/Mihomo proxy manager with subscription support + automatic health checking
+
+```yaml
+proxy-groups:
+  - name: AUTO
+    type: url-test           # Auto-select fastest working proxy
+    url: https://www.google.com/generate_204
+    interval: 300            # Re-test every 5 minutes
+    tolerance: 150           # Switch if 150ms faster
+    lazy: false              # Test all proxies on startup
+    use:
+      - subscription
+
+rules:
+  - MATCH,AUTO
+```
+
+**Integration**:
+- Playwright: `browser.launch(proxy={'server': 'http://127.0.0.1:7890'})`
+- httpx: `httpx.Client(proxy='http://127.0.0.1:7890', http2=True)`
+
+**Per-provider configuration**:
+```python
+PROVIDERS = {
+    'anyrouter': {'use_proxy': False},        # Globally accessible
+    'agentrouter': {'use_proxy': True},       # Geo-restricted
+}
+```
+
+**Health checking**: Mihomo automatically tests each proxy every 5 minutes, removes dead proxies from rotation.
+
+See `references/proxy-rotation-strategies.md` for Clash config, health checking implementation, and geo-matching patterns.
+
 ## Anti-Bot Severity Ladder
 
-| Level | Typical signals | Recommended baseline |
-|---|---|---|
-| L0 | No active bot stack | requests/httpx + throttling |
-| L1 | IP/rate checks only | rotating proxies + retries |
-| L2 | TLS/HTTP2 checks | curl_cffi/hrequests/rnet |
-| L3 | JS + browser fingerprint | Playwright + stealth patching |
-| L4 | behavior + challenge loops | Patchright/Camoufox + residential/ISP |
-| L5 | enterprise bot manager | full stack + adaptive controls + fallback APIs |
+| Level | Typical signals | Recommended baseline | Real-world examples |
+|---|---|---|---|
+| L0 | No active bot stack | requests/httpx + throttling | Internal APIs, small sites |
+| L1 | IP/rate checks only | rotating proxies + retries | Public data APIs |
+| L2 | TLS/HTTP2 checks | curl_cffi/hrequests/rnet | Basic Cloudflare, simple WAF |
+| L3 | JS + browser fingerprint | Playwright + stealth patching | Cloudflare JS challenge, Aliyun `acw_tc` |
+| L4 | behavior + challenge loops | Patchright/Camoufox + residential/ISP | Cloudflare managed challenge, Aliyun `acw_sc__v2` |
+| L5 | enterprise bot manager | full stack + adaptive controls + fallback APIs | Akamai Bot Manager, DataDome, PerimeterX |
+
+**Escalation strategy**:
+- L0→L1: Add proxy rotation when seeing 429 rate limits
+- L1→L2: Switch to curl_cffi when seeing TLS fingerprint detection (empty response, instant 403)
+- L2→L3: Use real browser when JS challenge appears ("checking your browser" page)
+- L3→L4: Add residential proxies + humanize mode when CAPTCHA appears repeatedly
+- L4→L5: Custom fingerprint rotation + behavioral modeling + CAPTCHA solving services
+
+**Cost implications**:
+- L0-L2: ~$0.001 per request (HTTP client, datacenter proxies)
+- L3: ~$0.01 per request (browser overhead)
+- L4: ~$0.10 per request (residential proxy)
+- L5: ~$1.00 per request (CAPTCHA solving, complex fingerprinting)
 
 ## Verification Checklist (before scaling)
 
@@ -161,6 +285,10 @@ See `references/authenticated-session-mapping.md` + `scripts/session_probe_templ
 - accept-language/timezone/proxy region are coherent
 - request cadence resembles real user flows
 - success rate and challenge rate are logged per target and per proxy ASN
+- session cookies validated before assuming code bugs (stale cookies masquerade as broken logic)
+- WAF cookies harvested fresh per request (cannot reuse across IPs or sessions)
+- browser profiles persistent for scheduled tasks (skip login when session valid)
+- proxy health checking enabled (automatic failover on dead proxies)
 
 ## References
 
@@ -169,10 +297,13 @@ See `references/authenticated-session-mapping.md` + `scripts/session_probe_templ
 - `references/anti-detection.md`
 - `references/anti-bot-bypass.md`
 - `references/scraping-frameworks.md`
-- `references/proxy-strategies.md`
+- `references/proxy-strategies.md` — legacy proxy guide
+- `references/proxy-rotation-strategies.md` — production proxy rotation (Clash/Mihomo, health checking, failover, geo-matching)
 - `references/captcha-bypass.md`
 - `references/api-reverse-engineering.md`
 - `references/authenticated-session-mapping.md` — inject a real session to map a CF-gated SPA API (in-page fetch, SPA-route-vs-API, auth-cookie fingerprinting, credential-vs-code isolation)
+- `references/automated-login-solver.md` — production login automation (form discovery, popup dismissal, credential injection, session validation, browser profile persistence)
+- `references/waf-bypass-techniques.md` — WAF cookie harvesting (dual-cookie strategy, Cloudflare/Aliyun/Akamai patterns, httpx configuration)
 - `references/data-extraction.md`
 - `references/legal-ethical.md`
 - `references/emerging-trends.md`
