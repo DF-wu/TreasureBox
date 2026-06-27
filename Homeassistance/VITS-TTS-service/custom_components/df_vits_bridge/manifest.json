@@ -1,0 +1,8 @@
+{
+  "domain": "df_vits_bridge",
+  "name": "DF VITS Bridge",
+  "version": "1.0.0",
+  "documentation": "https://example.invalid/df-vits-bridge",
+  "requirements": [],
+  "codeowners": []
+}

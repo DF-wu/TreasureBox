@@ -1,0 +1,32 @@
+generate:
+  name: Generate VITS audio
+  description: Generate a VITS WAV file under /media/vits using the local wrapper.
+  fields:
+    text:
+      name: Text
+      description: Raw message text before normalization.
+      required: true
+      selector:
+        text:
+    lang:
+      name: Language
+      description: VITS language key.
+      example: zh
+      selector:
+        select:
+          options:
+            - zh
+            - ja
+            - mix
+    speaker:
+      name: Speaker
+      description: Explicit speaker override.
+      example: ayaka
+      selector:
+        text:
+    output:
+      name: Output path
+      description: Absolute output path under /media/vits.
+      required: true
+      selector:
+        text:
