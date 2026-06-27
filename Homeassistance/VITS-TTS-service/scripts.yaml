@@ -1,0 +1,142 @@
+df_room_say_edge:
+  alias: DF 房間廣播（Edge TTS）
+  mode: queued
+  max: 10
+  fields:
+    message:
+      name: Message
+      description: 要廣播的內容
+      required: true
+      selector:
+        text:
+    voice:
+      name: Voice
+      description: Edge TTS voice
+      default: zh-TW-HsiaoChenNeural
+      selector:
+        text:
+    media_players:
+      name: Media Players
+      description: 要廣播到哪些裝置；留空時預設 DF 房間喇叭
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+    volume:
+      name: Volume
+      description: 播報音量（0.0-1.0）
+      default: 0.75
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+          mode: slider
+  sequence:
+  - variables:
+      target_media_players: '{{ media_players | default([''media_player.nestaudio4326''], true) }}'
+  - repeat:
+      for_each: '{{ target_media_players }}'
+      sequence:
+      - action: media_player.volume_set
+        data:
+          entity_id: '{{ repeat.item }}'
+          volume_level: '{{ volume | default(0.75) | float }}'
+      - action: tts.edge_tts_say
+        data:
+          entity_id: '{{ repeat.item }}'
+          cache: false
+          message: '{{ message }}'
+          language: '{{ voice | default(''zh-TW-HsiaoChenNeural'') }}'
+
+df_room_say_vits:
+  alias: DF 廣播（VITS TTS）
+  mode: queued
+  max: 10
+  fields:
+    message:
+      name: Message
+      description: 要廣播的內容
+      required: true
+      selector:
+        text:
+    media_players:
+      name: Media Players
+      description: 要廣播到哪些裝置；留空時預設 DF 房間喇叭
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+    speaker:
+      name: Speaker
+      description: VITS speaker alias/name；留空時會依語言自動選擇（zh→云堇，ja→ayaka）
+      default: ''
+      selector:
+        text:
+    lang:
+      name: Language
+      description: vits-tts language code
+      default: zh
+      selector:
+        select:
+          options:
+          - zh
+          - ja
+          - mix
+    volume:
+      name: Volume
+      description: 播報音量（0.0-1.0）
+      default: 0.75
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+          mode: slider
+  sequence:
+  - variables:
+      resolved_lang: '{{ lang | default(''zh'') }}'
+      resolved_speaker: >-
+        {% set explicit = speaker | default('', true) | trim %}
+        {% set requested_lang = lang | default('zh') %}
+        {% if explicit %}
+          {{ explicit }}
+        {% elif requested_lang == 'ja' %}
+          ayaka
+        {% else %}
+          云堇
+        {% endif %}
+      output_filename: '{{ ''df-room-'' ~ context.id ~ ''.wav'' }}'
+      output_path: '{{ ''/media/vits/'' ~ output_filename }}'
+      media_source_path: '{{ ''media-source://media_source/local/vits/'' ~ output_filename }}'
+      playback_url: '{{ ''http://192.168.11.201:8123/media/local/vits/'' ~ output_filename }}'
+      target_media_players: '{{ media_players | default([''media_player.nestaudio4326''], true) }}'
+  - action: df_vits_bridge.generate
+    response_variable: shell_response
+    data:
+      text: '{{ message }}'
+      speaker: '{{ resolved_speaker }}'
+      lang: '{{ resolved_lang }}'
+      output: '{{ output_path }}'
+  - if:
+    - condition: template
+      value_template: '{{ shell_response["returncode"] != 0 }}'
+    then:
+    - stop: VITS generation failed
+  - delay:
+      milliseconds: 800
+  - repeat:
+      for_each: '{{ target_media_players }}'
+      sequence:
+      - action: media_player.volume_set
+        data:
+          entity_id: '{{ repeat.item }}'
+          volume_level: '{{ volume | default(0.75) | float }}'
+      - action: media_player.play_media
+        data:
+          entity_id: '{{ repeat.item }}'
+          media:
+            media_content_id: '{{ playback_url }}'
+            media_content_type: audio/x-wav
+            metadata: {}
+  description: ''

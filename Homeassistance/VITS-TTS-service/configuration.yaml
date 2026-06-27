@@ -1,0 +1,27 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+# for edge tts config
+tts:
+  - platform: edge_tts
+    language: zh-TW-HsiaoChenNeural
+    volume: +5%
+
+# for reverse proxy work
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 192.168.10.0/23
+automation: !include automations.yaml
+script: !include scripts.yaml
+df_vits_bridge:
+scene: !include scenes.yaml
+
+# data retention
+recorder:
+  purge_keep_days: 730
+  commit_interval: 3
