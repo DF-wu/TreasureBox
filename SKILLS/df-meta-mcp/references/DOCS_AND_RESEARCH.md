@@ -24,7 +24,7 @@ This family group combines **Context7**, **DeepWiki**, and **Tavily**.
 
 ## Tavily rules
 
-- `tavily_search` is the normal starting point for live web queries.
+- `tavily-hikari__tavily_search` is the normal starting point for live web queries (tool names are prefixed on the gateway).
 - `tavily_extract` is for pulling page content after you already know the URLs.
 - `tavily_crawl` and `tavily_map` are for site-structure discovery.
 - `tavily_research` is the heavier option when you need a synthesized, multi-source answer.

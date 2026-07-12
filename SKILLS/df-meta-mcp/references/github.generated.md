@@ -13,13 +13,15 @@
 
 ## `github_mcp__add_issue_comment`
 
-- **What it does:** Add a comment to a specific issue in a GitHub repository. Use this tool to add comments to pull requests as well (in this case pass pull request number as issue_number), but only if user is not asking specifically to add review comments.
-- **Required params:** `owner`, `repo`, `issue_number`, `body`
+- **What it does:** Add a comment and/or reaction to a specific issue or issue comment in a GitHub repository. Use this tool with pull requests as well (in this case pass pull request number as issue_number), but only if user is not asking specifically to add or react to review comments. At least one of body or reaction is required.
+- **Required params:** `owner`, `repo`, `issue_number`
+- **Optional params (first 3):** `body`, `comment_id`, `reaction`
 
 ## `github_mcp__add_reply_to_pull_request_comment`
 
-- **What it does:** Add a reply to an existing pull request comment. This creates a new comment that is linked as a reply to the specified comment.
-- **Required params:** `owner`, `repo`, `pullNumber`, `commentId`, `body`
+- **What it does:** Add a reply and/or reaction to an existing pull request comment. This can create a new comment linked as a reply to the specified comment, add an emoji reaction to the specified comment, or do both. At least one of body or reaction is required.
+- **Required params:** `owner`, `repo`, `commentId`
+- **Optional params (first 3):** `body`, `pullNumber`, `reaction`
 
 ## `github_mcp__create_branch`
 

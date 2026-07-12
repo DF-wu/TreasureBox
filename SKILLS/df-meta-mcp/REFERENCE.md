@@ -1,134 +1,77 @@
----
-
 # REFERENCE
 
-This file is the operational quick-start for DF's MetaMCP endpoint skill.
+Operational quick-start for **DF MetaMCP**. Commands assume the **skill root** as cwd.
 
-Assume the current working directory is the **skill root**. If it is not, replace `scripts/dfmcp` and `scripts/sync_catalog.py` with the actual installed path of this skill.
+## Endpoint and wrapper
 
-## Endpoint
+| Item | Value |
+| --- | --- |
+| URL | `https://metamcp.dfder.tw/metamcp/chatbot/mcp` |
+| Logical mcporter name | `dfmcp` (label only; wrapper passes `--http-url` every time) |
+| Entry script | `scripts/dfmcp` |
 
-- Default URL: `https://metamcp.dfder.tw/metamcp/chatbot/mcp`
-- Default mcporter name: `dfmcp`
-- Wrapper: `scripts/dfmcp`
-
-The wrapper prefers:
-
-```bash
-mcporter
-```
-
-Then falls back to:
+Overrides:
 
 ```bash
-bunx -y mcporter
+DF_METAMCP_ENDPOINT='https://example.com/mcp' DF_METAMCP_NAME=staging bash scripts/dfmcp list
 ```
 
-And finally:
+`mcporter` binary: `PATH` → `bunx -y mcporter` → `npx -y mcporter`.
+
+## Commands
 
 ```bash
-npx -y mcporter
+bash scripts/dfmcp list              # tool names (lighter than --schema)
+bash scripts/dfmcp schema            # full JSON schemas (heavy)
+bash scripts/dfmcp call <tool> --args '<json>' --output json
+bash scripts/dfmcp refresh           # sync references/*.generated.md from live gateway
+python3 scripts/sync_catalog.py      # same as refresh
 ```
 
-You can temporarily override the endpoint or the logical server name via environment variables:
-
-```bash
-DF_METAMCP_ENDPOINT='https://example.com/mcp' DF_METAMCP_NAME=test bash scripts/dfmcp list
-```
-
-## The commands you will use most
-
-List tools:
-
-```bash
-bash scripts/dfmcp list
-bash scripts/dfmcp schema
-bash scripts/dfmcp list --json
-```
-
-Call a tool:
+### Call examples
 
 ```bash
 bash scripts/dfmcp call github_mcp__get_me --output json
-bash scripts/dfmcp call github_mcp__search_repositories --args '{"query":"DF-wu lilac-mono"}' --output json
+bash scripts/dfmcp call github_mcp__search_repositories --args '{"query":"org:DF-wu"}' --output json
+bash scripts/dfmcp call ticktick__list_projects --output json
 bash scripts/dfmcp call hackmd__list-notes --output json
+bash scripts/dfmcp call tavily-hikari__tavily_search --args '{"query":"MetaMCP"}' --output json
 ```
 
-Refresh the generated catalogs:
+Tool argument names match each tool's JSON schema (GitHub often uses camelCase in schema; HackMD uses kebab-case tool suffixes).
 
-```bash
-bash scripts/dfmcp refresh
-```
+## Wrapper mapping
 
-## Wrapper behavior
+| `dfmcp` subcommand | Behavior |
+| --- | --- |
+| `list` | `mcporter list --http-url $ENDPOINT --name $NAME` |
+| `schema` | `list --schema` |
+| `call <name>` | `mcporter call $ENDPOINT.<name>` unless name contains `.` or `http` |
+| `auth`, `config`, `daemon`, … | passthrough to `mcporter` |
+| `refresh` | runs `scripts/sync_catalog.py` |
 
-- `list` → `mcporter list --http-url <endpoint> --name <name>`
-- `schema` → shorthand for `list --schema`
-- `call <tool>` → accepts a plain tool name like `github_mcp__get_me`
-- `call <selector>` → also accepts a fully qualified selector if you already have one
-- `auth`, `config`, `generate-cli`, `inspect-cli`, `emit-ts`, `daemon` → passed through to `mcporter`
+## Optional persistent mcporter config
 
-This keeps day-to-day usage short while still exposing the full mcporter surface when needed.
-
-## Always prefer these calling conventions
-
-### For objects / arrays / nested payloads
-
-```bash
-bash scripts/dfmcp call <tool> --args '{"key":"value","items":[1,2,3]}' --output json
-```
-
-### For simple scalar parameters
-
-You may pass inline key/value arguments if the tool is simple, but `--args` is still safer and more consistent.
-
-## Optional: add a named mcporter server outside the wrapper
-
-If you want shorter raw `mcporter` commands outside the wrapper:
+Not required for this skill. For interactive shells only:
 
 ```bash
 mcporter config add --scope home dfmcp https://metamcp.dfder.tw/metamcp/chatbot/mcp
-```
-
-Or, if `mcporter` is not installed globally:
-
-```bash
-bunx -y mcporter config add --scope home dfmcp https://metamcp.dfder.tw/metamcp/chatbot/mcp
-```
-
-Then:
-
-```bash
-mcporter list dfmcp --schema
 mcporter call dfmcp.github_mcp__get_me --output json
 ```
 
-This is optional. The skill does **not** require that config entry because the wrapper already hardcodes the endpoint by default.
-
-## Refresh the generated catalogs directly
-
-```bash
-python3 scripts/sync_catalog.py
-```
-
-This updates:
-
-- `references/catalog.generated.md`
-- one generated markdown file per family
-
-## Which reference file to read
+## Which manual guide to open
 
 - GitHub → `references/GITHUB.md`
 - TickTick → `references/TICKTICK.md`
 - HackMD → `references/HACKMD.md`
 - Context7 / DeepWiki / Tavily → `references/DOCS_AND_RESEARCH.md`
-- Sequential thinking helper → `references/SEQUENTIAL_THINKING.md`
+- Sequential thinking → `references/SEQUENTIAL_THINKING.md`
 
-## Practical defaults
+Exact tool names and required fields → matching `references/*.generated.md` (index: `references/catalog.generated.md`).
 
-- Prefer `--output json`
-- Prefer `--args '{...}'`
-- Do not dump the full catalog into context unless you actually need it
-- Read/search the target object before mutation whenever IDs or exact targets are not already known
-- Read only the relevant family file first
-- Use the generated family files when you need exact tool names or required parameters
+## Agent discipline
+
+- `--output json` and `--args` for non-trivial payloads.
+- One family guide + at most one generated file per task.
+- Read/search before mutate when IDs are uncertain.
+- After MetaMCP server changes, run `refresh` and commit generated docs (TreasureBox maintainers).

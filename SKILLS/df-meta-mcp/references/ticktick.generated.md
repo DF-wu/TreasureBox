@@ -19,7 +19,7 @@
 
 ## `ticktick__batch_update_tasks`
 
-- **What it does:** Batch update multiple existing tasks in TickTick. Use this when you need to modify several tasks at once with new values.
+- **What it does:** Batch update existing tasks.
 - **Required params:** `tasks`
 
 ## `ticktick__complete_task`
@@ -125,10 +125,8 @@
 
 ## `ticktick__get_habit_checkins`
 
-- **What it does:** Get habit check-ins by habitIds and date stamp range. `from_stamp` and `to_stamp` must be int date stamps in `yyyyMMdd` format (for example, `20260401` and `20260430`).
+- **What it does:** Get habit check-ins by habitIds and yyyyMMdd int stamp range.
 - **Required params:** `habit_ids`, `from_stamp`, `to_stamp`
-- **Important notes:**
-  - Get habit check-ins by habitIds and date stamp range. `from_stamp` and `to_stamp` must be int date stamps in `yyyyMMdd` format (for example, `20260401` and `20260430`).
 
 ## `ticktick__get_project_by_id`
 
@@ -187,7 +185,7 @@
 
 ## `ticktick__list_projects`
 
-- **What it does:** List projects of the current user. Use offset to skip projects and limit to cap the number returned for pagination. When both offset and limit are omitted, the result also includes the virtual "inbox" project for tasks without a project; paginated results only include projects returned by the API.
+- **What it does:** List projects. Supports offset/limit pagination; unpaginated results also include virtual "inbox".
 - **Required params:** (none)
 - **Optional params (first 2):** `offset`, `limit`
 
@@ -205,7 +203,7 @@
 
 ## `ticktick__list_undone_tasks_by_time_query`
 
-- **What it does:** List undone tasks using a predefined time query. Supported values: today, last24hour, last7day, tomorrow, next24hour, next7day. Default is today.
+- **What it does:** List undone tasks by time query: today, last24hour, last7day, tomorrow, next24hour, next7day.
 - **Required params:** (none)
 - **Optional params (first 1):** `query_command`
 
@@ -247,7 +245,7 @@
 
 ## `ticktick__update_task`
 
-- **What it does:** Update an existing task by projectId and taskId. To remove a parent-child relationship, set parentId to an empty string. To clear dueDate or startDate, set it to "1970-01-01T00:00:00.000+0000".
+- **What it does:** Update a task. Set parentId='' to detach; set startDate/dueDate to "1970-01-01T00:00:00.000+0000" to clear.
 - **Required params:** `task_id`, `task`
 
 ## `ticktick__upsert_habit_checkins`

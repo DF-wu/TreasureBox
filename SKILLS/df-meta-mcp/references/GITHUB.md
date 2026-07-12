@@ -14,7 +14,7 @@ Use this family for **repository operations, issues, pull requests, reviews, rel
 - **Need to add a comment to the latest pending review?** Use `add_comment_to_pending_review`.
 - **Need to update one file?** Use `create_or_update_file`.
 - **Need to push several files in one commit?** Use `push_files`.
-- **Need background implementation by Copilot?** Use `create_pull_request_with_copilot` or `assign_copilot_to_issue`, then poll `get_copilot_job_status`.
+- **Need Copilot on a PR?** Use `request_copilot_review` (current gateway inventory; there is no separate assign/issue/PR job polling tool).
 
 ## Important gotchas
 
