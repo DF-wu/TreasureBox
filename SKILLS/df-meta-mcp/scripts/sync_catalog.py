@@ -11,15 +11,11 @@ from typing import Any
 
 DEFAULT_ENDPOINT = "https://metamcp.dfder.tw/metamcp/chatbot/mcp"
 DEFAULT_NAME = "dfmcp"
-FAMILY_TITLES = {
-    "github_mcp": "GitHub",
-    "ticktick": "TickTick",
-    "context7": "Context7",
-    "deepwiki": "DeepWiki",
-    "hackmd": "HackMD",
-    "tavily-hikari": "Tavily",
-    "mcp-sequentialthinking-tools": "Sequential Thinking",
-}
+
+
+def family_display_title(family: str) -> str:
+    """Human title from live family key only (no curated server list)."""
+    return family.replace("_", " ").replace("-", " ").title()
 
 
 def main() -> int:
@@ -47,7 +43,7 @@ def main() -> int:
 
     for family in sorted(grouped):
         tools_for_family = sorted(grouped[family], key=lambda t: str(t.get("name", "")))
-        title = FAMILY_TITLES.get(family, family)
+        title = family_display_title(family)
         generated_name = generated_file_name(family)
         summary_lines.append(
             f"- **{title}** (`{family}`) — {len(tools_for_family)} tools → `{generated_name}`"

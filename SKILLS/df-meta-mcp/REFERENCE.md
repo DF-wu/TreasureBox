@@ -6,7 +6,7 @@ Operational quick-start for **DF MetaMCP**. Commands assume the **skill root** a
 
 | Item | Value |
 | --- | --- |
-| URL | `https://metamcp.dfder.tw/metamcp/chatbot/mcp` |
+| URL | `DF_METAMCP_ENDPOINT` (default in `scripts/dfmcp`) |
 | Logical mcporter name | `dfmcp` (label only; wrapper passes `--http-url` every time) |
 | Entry script | `scripts/dfmcp` |
 
@@ -55,23 +55,18 @@ Tool argument names match each tool's JSON schema (GitHub often uses camelCase i
 Not required for this skill. For interactive shells only:
 
 ```bash
-mcporter config add --scope home dfmcp https://metamcp.dfder.tw/metamcp/chatbot/mcp
-mcporter call dfmcp.github_mcp__get_me --output json
+# Optional; same URL/name as scripts/dfmcp defaults or your DF_METAMCP_* env
+mcporter config add --scope home "${DF_METAMCP_NAME:-dfmcp}" "${DF_METAMCP_ENDPOINT:?set endpoint}"
+mcporter call "${DF_METAMCP_NAME:-dfmcp}.github_mcp__get_me" --output json
 ```
 
-## Which manual guide to open
+## Which guide
 
-- GitHub → `references/GITHUB.md`
-- TickTick → `references/TICKTICK.md`
-- HackMD → `references/HACKMD.md`
-- Context7 / DeepWiki / Tavily → `references/DOCS_AND_RESEARCH.md`
-- Sequential thinking → `references/SEQUENTIAL_THINKING.md`
-
-Exact tool names and required fields → matching `references/*.generated.md` (index: `references/catalog.generated.md`).
+See `references/ROUTING.md`. Params: one matching `*.generated.md` or `bash scripts/dfmcp schema` (heavy).
 
 ## Agent discipline
 
 - `--output json` and `--args` for non-trivial payloads.
 - One family guide + at most one generated file per task.
 - Read/search before mutate when IDs are uncertain.
-- After MetaMCP server changes, run `refresh` and commit generated docs (TreasureBox maintainers).
+- Catalog files are optional cache; refresh when missing or after gateway changes.
