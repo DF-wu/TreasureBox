@@ -1,5 +1,7 @@
 # Docs & research (Context7, DeepWiki, Tavily)
 
+Open-web **discovery** (no URL yet): prefer `GROK_SEARCH.md` (`grok-search-rs__web_search`) or Tavily below — see routing notes in each guide.
+
 ## Context7 (`context7` — 2 tools)
 
 1. `context7__resolve-library-id` — `libraryName` + `query` (max **3** calls per user question).

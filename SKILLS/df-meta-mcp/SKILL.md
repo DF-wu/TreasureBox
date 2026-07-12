@@ -1,6 +1,6 @@
 ---
 name: df-meta-mcp
-description: Live dfmcp MetaMCP (116 tools)—github_mcp__*, ticktick__*, hackmd__*, context7__*, deepwiki__*, tavily-hikari__* via scripts/dfmcp. GitHub issue/PR/file, TickTick task/habit, HackMD note, lib docs, repo wiki, Tavily web—not local gh/files.
+description: Live dfmcp (121 tools)—github_mcp__*, ticktick__*, hackmd__*, grok-search-rs__*, context7__*, deepwiki__*, tavily-hikari__* via scripts/dfmcp. GitHub/TickTick/HackMD, Grok or Tavily web, lib docs, repo wiki—not local gh/files.
 homepage: https://metamcp.dfder.tw/metamcp/chatbot/mcp
 metadata: {"clawdbot":{"requires":{"skills":["mcporter"],"bins":["python3","bash"]}}}
 ---
@@ -11,7 +11,7 @@ Tools are **`family__suffix`** on the wire (e.g. `github_mcp__pull_request_read`
 
 ## Flow
 
-`REFERENCE.md` → `ROUTING.md` → one of `GITHUB.md` / `TICKTICK.md` / `HACKMD.md` / `DOCS_AND_RESEARCH.md` / `SEQUENTIAL_THINKING.md` → `bash scripts/dfmcp call <full_name> --args '{...}' --output json`.
+`REFERENCE.md` → `ROUTING.md` → one family guide (`GITHUB`, `TICKTICK`, `HACKMD`, `GROK_SEARCH`, `DOCS_AND_RESEARCH`, `SEQUENTIAL_THINKING`) → `bash scripts/dfmcp call <full_name> --args '{...}' --output json`.
 
 ## Skip
 

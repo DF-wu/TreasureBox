@@ -36,10 +36,12 @@ bash scripts/dfmcp call github_mcp__pull_request_read --args '{"owner":"DF-wu","
 bash scripts/dfmcp call ticktick__list_projects --output json
 bash scripts/dfmcp call hackmd__list-notes --output json
 bash scripts/dfmcp call context7__resolve-library-id --args '{"libraryName":"Bun","query":"test"}' --output json
+bash scripts/dfmcp call grok-search-rs__web_search --args '{"query":"..."}' --output json
+bash scripts/dfmcp call grok-search-rs__web_fetch --args '{"url":"https://..."}' --output json
 bash scripts/dfmcp call tavily-hikari__tavily_search --args '{"query":"..."}' --output json
 ```
 
-Task → tool: `references/GITHUB.md` (44), `TICKTICK.md` (47), `HACKMD.md` (14), `DOCS_AND_RESEARCH.md`, `SEQUENTIAL_THINKING.md`. Params: `*.generated.md`.
+Task → tool: `GITHUB.md` (44), `TICKTICK.md` (47), `HACKMD.md` (14), `GROK_SEARCH.md` (5), `DOCS_AND_RESEARCH.md` (10), `SEQUENTIAL_THINKING.md` (1). Params: `*.generated.md`; index `catalog.generated.md` (**121** tools).
 
 ## Wrapper mapping
 
