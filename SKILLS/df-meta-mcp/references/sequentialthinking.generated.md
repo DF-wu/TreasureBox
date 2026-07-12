@@ -1,4 +1,4 @@
-# Sequential Thinking live inventory
+# Mcp Sequentialthinking Tools live inventory
 
 - Family key: `mcp-sequentialthinking-tools`
 - Tool count: **1**

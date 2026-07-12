@@ -1,4 +1,4 @@
-# HackMD live inventory
+# Hackmd live inventory
 
 - Family key: `hackmd`
 - Tool count: **14**

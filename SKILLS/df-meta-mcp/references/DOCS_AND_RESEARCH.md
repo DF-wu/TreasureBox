@@ -1,36 +1,30 @@
----
+# Docs & research (Context7, DeepWiki, Tavily)
 
-# DOCS_AND_RESEARCH
+## Context7 (`context7` — 2 tools)
 
-This family group combines **Context7**, **DeepWiki**, and **Tavily**.
+1. `context7__resolve-library-id` — `libraryName` + `query` (max **3** calls per user question).
+2. `context7__query-docs` — `libraryId` + `query` (max **3** calls per question).
 
-## Which one to use
+Skip resolve if user already gave `/org/project` or `/org/project/version`.
 
-- **Context7** → use for external libraries/frameworks/packages, current API docs, and code examples.
-- **DeepWiki** → use for knowledge about a specific GitHub repository: wiki structure, wiki contents, or repo-aware Q&A.
-- **Tavily** → use for broader live web research, search, extraction, and discovery when the task is not limited to a package docsite or one GitHub repo.
+## DeepWiki (`deepwiki` — 3 tools)
 
-## Context7 rules
+| Task | Tool |
+| --- | --- |
+| Topic outline | `deepwiki__read_wiki_structure` |
+| Wiki page content | `deepwiki__read_wiki_contents` |
+| Repo Q&A synthesis | `deepwiki__ask_question` |
 
-- Normally call `context7__resolve-library-id` first.
-- Then call `context7__query-docs` with the resolved library id.
-- If the user already gives an explicit Context7 library id in `/org/project` or `/org/project/version` form, you can skip the resolve step.
+Use for **one GitHub repo** knowledge — not third-party package docs (use Context7).
 
-## DeepWiki rules
+## Tavily (`tavily-hikari` — 5 tools)
 
-- `read_wiki_structure` is the lightest way to see what topics exist.
-- `read_wiki_contents` is for actual wiki/topic content.
-- `ask_question` is the best tool when the user wants an answer synthesized from repo knowledge rather than raw pages.
+| Task | Tool |
+| --- | --- |
+| Web search | `tavily-hikari__tavily_search` |
+| URL extract | `tavily-hikari__tavily_extract` |
+| Site crawl | `tavily-hikari__tavily_crawl` |
+| Site map | `tavily-hikari__tavily_map` |
+| Multi-source research | `tavily-hikari__tavily_research` |
 
-## Tavily rules
-
-- `tavily-hikari__tavily_search` is the normal starting point for live web queries (tool names are prefixed on the gateway).
-- `tavily_extract` is for pulling page content after you already know the URLs.
-- `tavily_crawl` and `tavily_map` are for site-structure discovery.
-- `tavily_research` is the heavier option when you need a synthesized, multi-source answer.
-
-## Use the generated inventories when you need exact tool names / parameters
-
-- `references/context7.generated.md`
-- `references/deepwiki.generated.md`
-- `references/tavily-hikari.generated.md`
+Params: `context7.generated.md`, `deepwiki.generated.md`, `tavily-hikari.generated.md`.

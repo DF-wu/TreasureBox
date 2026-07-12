@@ -1,4 +1,4 @@
-# DeepWiki live inventory
+# Deepwiki live inventory
 
 - Family key: `deepwiki`
 - Tool count: **3**

@@ -1,24 +1,22 @@
 ---
 name: df-meta-mcp
-description: MetaMCP via scripts/dfmcp+mcporter — GitHub, TickTick, HackMD, Context7, DeepWiki, Tavily. Use when the user needs those logged-in APIs (issue/PR, task/habit, note, lib docs, repo wiki, web research); skip local repo/files and lone tools search.
+description: Live dfmcp MetaMCP (116 tools)—github_mcp__*, ticktick__*, hackmd__*, context7__*, deepwiki__*, tavily-hikari__* via scripts/dfmcp. GitHub issue/PR/file, TickTick task/habit, HackMD note, lib docs, repo wiki, Tavily web—not local gh/files.
 homepage: https://metamcp.dfder.tw/metamcp/chatbot/mcp
 metadata: {"clawdbot":{"requires":{"skills":["mcporter"],"bins":["python3","bash"]}}}
 ---
 
 # df-meta-mcp
 
-Stateless entry: endpoint defaults sit in `scripts/dfmcp` (`DF_METAMCP_ENDPOINT` / `DF_METAMCP_NAME` to override). No host `mcporter.json` required. Run commands from this skill root.
+Tools are **`family__suffix`** on the wire (e.g. `github_mcp__pull_request_read`, `ticktick__list_undone_tasks_by_time_query`, `hackmd__search-notes`). Pick tool from the family guides in `references/`; params from `references/*.generated.md` (live snapshot: `bash scripts/dfmcp refresh`).
 
 ## Flow
 
-`REFERENCE.md` → `references/ROUTING.md` (one family) → that family’s guide under `references/` → optional `*.generated.md` or `bash scripts/dfmcp list` / `schema` for params → `bash scripts/dfmcp call <tool> --args '{...}' --output json`.
+`REFERENCE.md` → `ROUTING.md` → one of `GITHUB.md` / `TICKTICK.md` / `HACKMD.md` / `DOCS_AND_RESEARCH.md` / `SEQUENTIAL_THINKING.md` → `bash scripts/dfmcp call <full_name> --args '{...}' --output json`.
 
-Do not bulk-load all `*.generated.md` files.
+## Skip
 
-## When / when not
-
-Use for remote GitHub, TickTick, HackMD, Context7, DeepWiki, or Tavily behind the gateway. Skip for local workspace work (`read_file`, `grep`, `gh`, patches) or a single unauthenticated `tools search`.
+Local workspace (`read_file`, `grep`, `gh`). Use when the task maps to a tool listed in `catalog.generated.md`.
 
 ## Failure
 
-Retry with full `--args`; check `schema` or one generated tool entry; `bash scripts/dfmcp list` if the tool may have been renamed on the gateway.
+`catalog.generated.md` or `bash scripts/dfmcp list` for names; one tool section in `*.generated.md` for args.

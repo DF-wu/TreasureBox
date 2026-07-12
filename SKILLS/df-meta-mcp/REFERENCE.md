@@ -28,17 +28,18 @@ bash scripts/dfmcp refresh           # sync references/*.generated.md from live 
 python3 scripts/sync_catalog.py      # same as refresh
 ```
 
-### Call examples
+### Call examples (names from live dfmcp)
 
 ```bash
 bash scripts/dfmcp call github_mcp__get_me --output json
-bash scripts/dfmcp call github_mcp__search_repositories --args '{"query":"org:DF-wu"}' --output json
+bash scripts/dfmcp call github_mcp__pull_request_read --args '{"owner":"DF-wu","repo":"TreasureBox","pullNumber":1}' --output json
 bash scripts/dfmcp call ticktick__list_projects --output json
 bash scripts/dfmcp call hackmd__list-notes --output json
-bash scripts/dfmcp call tavily-hikari__tavily_search --args '{"query":"MetaMCP"}' --output json
+bash scripts/dfmcp call context7__resolve-library-id --args '{"libraryName":"Bun","query":"test"}' --output json
+bash scripts/dfmcp call tavily-hikari__tavily_search --args '{"query":"..."}' --output json
 ```
 
-Tool argument names match each tool's JSON schema (GitHub often uses camelCase in schema; HackMD uses kebab-case tool suffixes).
+Task → tool: `references/GITHUB.md` (44), `TICKTICK.md` (47), `HACKMD.md` (14), `DOCS_AND_RESEARCH.md`, `SEQUENTIAL_THINKING.md`. Params: `*.generated.md`.
 
 ## Wrapper mapping
 

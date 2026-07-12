@@ -6,12 +6,12 @@
 ## Families
 
 - **Context7** (`context7`) — 2 tools → `context7.generated.md`
-- **DeepWiki** (`deepwiki`) — 3 tools → `deepwiki.generated.md`
-- **GitHub** (`github_mcp`) — 44 tools → `github.generated.md`
-- **HackMD** (`hackmd`) — 14 tools → `hackmd.generated.md`
-- **Sequential Thinking** (`mcp-sequentialthinking-tools`) — 1 tools → `sequentialthinking.generated.md`
-- **Tavily** (`tavily-hikari`) — 5 tools → `tavily-hikari.generated.md`
-- **TickTick** (`ticktick`) — 47 tools → `ticktick.generated.md`
+- **Deepwiki** (`deepwiki`) — 3 tools → `deepwiki.generated.md`
+- **Github Mcp** (`github_mcp`) — 44 tools → `github.generated.md`
+- **Hackmd** (`hackmd`) — 14 tools → `hackmd.generated.md`
+- **Mcp Sequentialthinking Tools** (`mcp-sequentialthinking-tools`) — 1 tools → `sequentialthinking.generated.md`
+- **Tavily Hikari** (`tavily-hikari`) — 5 tools → `tavily-hikari.generated.md`
+- **Ticktick** (`ticktick`) — 47 tools → `ticktick.generated.md`
 
 ## Notes
 

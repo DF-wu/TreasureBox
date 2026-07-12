@@ -1,4 +1,4 @@
-# TickTick live inventory
+# Ticktick live inventory
 
 - Family key: `ticktick`
 - Tool count: **47**

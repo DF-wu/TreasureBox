@@ -1,4 +1,4 @@
-# GitHub live inventory
+# Github Mcp live inventory
 
 - Family key: `github_mcp`
 - Tool count: **44**

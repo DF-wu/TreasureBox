@@ -1,4 +1,4 @@
-# Tavily live inventory
+# Tavily Hikari live inventory
 
 - Family key: `tavily-hikari`
 - Tool count: **5**
