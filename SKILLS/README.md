@@ -12,13 +12,14 @@
 
 ## Current active skills
 
-As of 2026-06-12, the active skill directories are:
+As of 2026-07-13, the active skill directories are:
 
 - `SKILLS/df-meta-mcp/`
 - `SKILLS/new-api-manage/`
 - `SKILLS/qwen3-asr-tts-hf2api/`
 - `SKILLS/vits-tts-hf2api/`
 - `SKILLS/web-reverse-engineering/`
+- `SKILLS/zhenhuan-elegant-chinese/`
 
 ## 2026-06-12 normalization check
 
