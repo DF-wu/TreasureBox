@@ -337,6 +337,26 @@ describe("media-generation CLI", () => {
     expect(await fs.readdir(outputDir)).toEqual([]);
   });
 
+  test.serial("terminal video task errors redact credentials", async () => {
+    const outputDir = await tempDirectory("media-video-error-");
+    const server = startServer(() =>
+      Response.json({
+        id: "video_failed",
+        status: "failed",
+        error: { message: `bad Authorization: Bearer ${API_KEY}` },
+      }),
+    );
+    const result = await runCLI(
+      ["video", "--prompt", PROMPT, "--path", "failed.mp4"],
+      { server, cwd: outputDir },
+    );
+    const error = parseFailure(result);
+    expect(error.code).toBe("VIDEO_FAILED");
+    expect(result.stderr).not.toContain(API_KEY);
+    expect(result.stderr).toContain("REDACTED");
+    expect(await fs.readdir(outputDir)).toEqual([]);
+  });
+
   test.serial(
     "timeout aborts the provider request and leaves no output",
     async () => {
