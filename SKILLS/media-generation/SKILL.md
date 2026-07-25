@@ -2,7 +2,7 @@
 name: media-generation
 description: Generate or edit images and generate videos through an OpenAI-compatible new-api endpoint. Use for gpt-image-2, gpt-5-image, nanobanana variants, Grok image, or Grok video; also use doctor to verify endpoint credentials and model routes.
 homepage: https://github.com/QuantumNous/new-api
-metadata: {}
+metadata: {"clawdbot":{"requires":{"bins":["node"]}}}
 ---
 
 # Media Generation
