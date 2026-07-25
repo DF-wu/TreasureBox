@@ -1,0 +1,25 @@
+{
+  "name": "media-generation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/cli.ts --outfile dist/media-generation.js --target node --packages=bundle --minify && bun -e 'const p=\"dist/media-generation.js\"; await Bun.write(p, (await Bun.file(p).text()).replace(/[ \\t]+$/gm, \"\"))' && chmod +x dist/media-generation.js",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:bundle": "MEDIA_GENERATION_CLI=dist bun test",
+    "fmt": "bunx prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\"",
+    "fmt:check": "bunx prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\""
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "3.0.7",
+    "ai": "7.0.22",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "22.10.5",
+    "prettier": "3.6.2",
+    "typescript": "5.7.2"
+  }
+}
