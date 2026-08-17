@@ -12,9 +12,10 @@
 
 ## Current active skills
 
-As of 2026-07-13, the active skill directories are:
+As of 2026-08-17, the active skill directories are:
 
 - `SKILLS/df-meta-mcp/`
+- `SKILLS/hackmd-browser-crud/`
 - `SKILLS/new-api-manage/`
 - `SKILLS/qwen3-asr-tts-hf2api/`
 - `SKILLS/vits-tts-hf2api/`

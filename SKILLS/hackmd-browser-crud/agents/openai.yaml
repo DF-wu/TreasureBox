@@ -1,0 +1,4 @@
+interface:
+  display_name: "HackMD Browser CRUD"
+  short_description: "Manage HackMD notes without paid API quota usage"
+  default_prompt: "Use $hackmd-browser-crud to safely manage my HackMD notes without the paid Public API or official MCP."

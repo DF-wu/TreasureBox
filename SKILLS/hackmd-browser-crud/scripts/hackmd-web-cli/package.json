@@ -1,0 +1,25 @@
+{
+  "name": "hackmd-web-cli",
+  "version": "0.1.0",
+  "description": "Cookie-backed HackMD CLI that uses the website instead of the metered Public API.",
+  "type": "module",
+  "bin": {
+    "hackmd-web": "./bin/hackmd-web.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/cli.js && node --check src/browser.js && node --check src/core.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright-core": "1.62.1"
+  },
+  "license": "MIT"
+}
