@@ -1,6 +1,0 @@
-{
-  "channel_id": 123,
-  "action": "get_key_status",
-  "page": 1,
-  "page_size": 50
-}
