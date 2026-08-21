@@ -1,0 +1,23 @@
+{
+  "name": "@df-wu/hackmd-realtime-cli",
+  "version": "2.0.0",
+  "description": "Agent-friendly HackMD CLI using authenticated realtime OT instead of browser automation",
+  "type": "module",
+  "bin": {
+    "hackmd-rt": "bin/hackmd-rt.js"
+  },
+  "scripts": {
+    "check": "npm run lint && npm test",
+    "lint": "node --check bin/hackmd-rt.js && node --check src/*.js && node --check test/*.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@hackmd/ot": "0.1.0",
+    "socket.io-client": "4.8.1"
+  },
+  "license": "MIT",
+  "private": true
+}

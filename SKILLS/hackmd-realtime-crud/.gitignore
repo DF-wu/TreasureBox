@@ -1,0 +1,4 @@
+node_modules/
+.hackmd-rt/
+coverage/
+*.log
